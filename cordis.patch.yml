@@ -1,0 +1,5 @@
+# dsh-deskpet bundle patch
+# 只插入我们自己的插件行，不替换任何官方组件。
+- insert:
+    - id: dsh-deskpet
+      name: dsh-deskpet

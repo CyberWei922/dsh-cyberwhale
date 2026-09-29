@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>DSH 桌面鲸鱼 · 行为原型</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.5 -apple-system, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+    color: #e8eefc;
+    background:
+      radial-gradient(1200px 700px at 15% 8%, #24304a 0%, transparent 60%),
+      radial-gradient(900px 600px at 88% 92%, #1d2b3f 0%, transparent 55%),
+      linear-gradient(160deg, #0d131f 0%, #131b2b 55%, #0b111b 100%);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── 模拟"桌面"：一条地平线 + 参考网格，方便看鲸鱼是不是真的在走 ── */
+  .desk-line {
+    position: fixed; left: 0; right: 0; bottom: 22%;
+    height: 1px; background: linear-gradient(90deg, transparent, #7aa2ff33 12%, #7aa2ff55 50%, #7aa2ff33 88%, transparent);
+  }
+  .desk-ticks {
+    position: fixed; left: 0; right: 0; bottom: 22%; height: 10px;
+    background-image: repeating-linear-gradient(90deg, #7aa2ff1f 0 1px, transparent 1px 64px);
+    opacity: .7;
+  }
+
+  /* ── 宠物层：铺满视口但不吃鼠标事件（空白处点击穿透）── */
+  #stage { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+  .pet {
+    position: absolute; left: 0; top: 0;
+    width: 168px; height: 140px;
+    pointer-events: none;
+    transform-origin: 50% 100%;
+    will-change: transform;
+  }
+  .pet button {
+    all: unset; display: block; width: 100%; height: 100%;
+    pointer-events: auto; cursor: grab; touch-action: none;
+  }
+  .pet button:active { cursor: grabbing; }
+
+  .art {
+    display: block; width: 100%; height: 100%;
+    pointer-events: none;
+    transform-origin: 50% 88%;
+    filter: drop-shadow(0 10px 8px #04070e66);
+    will-change: transform;
+  }
+  .shadow {
+    position: absolute; left: 26%; right: 26%; bottom: 2px; height: 10px;
+    background: radial-gradient(50% 50% at 50% 50%, #04070e88, transparent 72%);
+    pointer-events: none; transition: opacity .3s, transform .3s;
+  }
+
+  /* ── 朝向：整个鲸鱼水平翻转（尾巴在后、脸在前）── */
+  .pet[data-dir="-1"] .flip { transform: scaleX(-1); }
+  .flip { transition: transform .18s ease; transform-origin: 50% 50%; }
+
+  /* ── 状态动画 ── */
+  .pet[data-state="idle"]      .art { animation: breathe 3.6s ease-in-out infinite; }
+  .pet[data-state="walk"]      .art { animation: walk 0.62s ease-in-out infinite; }
+  .pet[data-state="work"]      .art { animation: work 1.5s ease-in-out infinite; }
+  .pet[data-state="waiting"]   .art { animation: ask 2.4s ease-in-out infinite; }
+  .pet[data-state="celebrate"] .art { animation: cheer .7s ease-in-out 4; }
+  .pet[data-state="error"]     .art { animation: oops .5s ease-out 2; }
+  .pet[data-state="sleep"]     .art { animation: snore 4.4s ease-in-out infinite; }
+  .pet[data-state="patted"]    .art { animation: hello .5s ease-in-out 2; }
+
+  @keyframes breathe { 0%,100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-3px) scaleY(1.025); } }
+  @keyframes walk    { 0%,100% { transform: translateY(0) rotate(-1.4deg); } 50% { transform: translateY(-9px) rotate(1.6deg); } }
+  @keyframes work    { 0%,100% { transform: translateY(0) rotate(-.6deg); } 40% { transform: translateY(-2px) rotate(.5deg); } 70% { transform: translateY(-1px) rotate(-.2deg); } }
+  @keyframes ask     { 0%,60%,100% { transform: rotate(0); } 22% { transform: rotate(-4deg) translateY(-4px); } 42% { transform: rotate(3deg) translateY(-2px); } }
+  @keyframes cheer   { 0%,100% { transform: translateY(0) rotate(-5deg); } 38% { transform: translateY(-26px) rotate(7deg); } 70% { transform: translateY(-5px) rotate(-1deg); } }
+  @keyframes oops    { 0% { transform: translateY(0) rotate(0); } 34% { transform: translateY(4px) rotate(-4deg); } 68% { transform: translateY(-2px) rotate(3deg); } 100% { transform: translateY(0) rotate(0); } }
+  @keyframes snore   { 0%,100% { transform: scale(1,1) translateY(0); } 50% { transform: scale(1.02,1.05) translateY(1px); } }
+  @keyframes hello   { 0%,100% { transform: rotate(0); } 30% { transform: rotate(-7deg) translateY(-9px); } 70% { transform: rotate(6deg) translateY(-3px); } }
+
+  /* 尾巴单独摆动，比整体动画更活 */
+  .tail { transform-origin: 88% 62%; animation: tail 1.5s ease-in-out infinite; }
+  [data-state="walk"] .tail { animation-duration: .62s; }
+  [data-state="sleep"] .tail { animation-duration: 5s; }
+  @keyframes tail { 0%,100% { transform: rotate(-5deg); } 50% { transform: rotate(6deg); } }
+
+  /* 喷水 / 睡觉的泡泡只在特定状态出现 */
+  .spout, .zzz, .sparks { opacity: 0; transition: opacity .3s; }
+  .pet[data-state="celebrate"] .spout { opacity: 1; }
+  .pet[data-state="sleep"] .zzz { opacity: 1; }
+  .pet[data-state="celebrate"] .sparks { opacity: 1; }
+  .zzz text { animation: float 2.6s ease-in-out infinite; }
+  @keyframes float { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
+  .sparks circle { animation: spark 1s ease-in-out infinite; }
+  .sparks circle:nth-child(2) { animation-delay: .18s; }
+  .sparks circle:nth-child(3) { animation-delay: .36s; }
+  @keyframes spark { 0%,100% { opacity: .2; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.15); } }
+
+  /* 爱心（摸头反馈） */
+  .hearts span {
+    position: absolute; left: 50%; top: 6%; font-size: 18px; color: #ff8fb0;
+    animation: heart 1.1s ease-out forwards; pointer-events: none;
+  }
+  @keyframes heart { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.6); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -52px) scale(1.15); } }
+
+  /* ── 气泡 ── */
+  .bubble {
+    position: absolute; left: 50%; bottom: 100%; margin-bottom: 8px;
+    translate: -50% 4px; opacity: 0; transition: opacity .18s, translate .18s;
+    background: #f4f8ff; color: #22314f;
+    padding: 8px 13px; border-radius: 16px 17px 16px 14px;
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    box-shadow: 0 6px 18px #04070e55; pointer-events: none;
+  }
+  .bubble::after {
+    content: ""; position: absolute; left: 26px; bottom: -5px; width: 9px; height: 9px;
+    background: #f4f8ff; border-radius: 50%;
+  }
+  .pet[data-bubble="1"] .bubble { opacity: 1; translate: -50% 0; }
+
+  /* ── 控制面板（真实插件里没有，这里是原型调试用）── */
+  .hud {
+    position: fixed; left: 18px; top: 18px; z-index: 40;
+    width: 300px; padding: 14px 15px;
+    background: #0f1626dd; backdrop-filter: blur(18px) saturate(140%);
+    border: .5px solid #ffffff1f; border-radius: 16px;
+    box-shadow: 0 18px 50px #04070e88;
+  }
+  .hud h1 { margin: 0 0 2px; font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+  .hud p { margin: 0 0 11px; font-size: 11.5px; color: #93a3c0; line-height: 1.55; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+  .row button {
+    flex: 1 1 auto; min-width: 0; padding: 6px 9px; font-size: 11.5px;
+    color: #dbe5fa; background: #ffffff12; border: .5px solid #ffffff24;
+    border-radius: 9px; cursor: pointer; transition: background .12s;
+  }
+  .row button:hover { background: #ffffff1f; }
+  .row button[aria-pressed="true"] { background: #4b7bec; border-color: #4b7bec; color: #fff; }
+  .stat { font: 11.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; color: #8fa2c4; }
+  .stat b { color: #cfe0ff; font-weight: 600; }
+  .note { margin-top: 10px; padding-top: 9px; border-top: .5px solid #ffffff14; font-size: 11px; color: #7f8fae; }
+
+  /* 拖拽时暂停动画，手感和真实插件一致 */
+  .pet[data-drag="1"] .art { animation-play-state: paused !important; }
+  .pet[data-drag="1"] { cursor: grabbing; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .art, .tail, .sparks circle, .zzz text { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="desk-line"></div>
+<div class="desk-ticks"></div>
+
+<div id="stage">
+  <div class="pet" id="pet" data-state="idle" data-dir="1" data-bubble="0">
+    <div class="shadow"></div>
+    <div class="bubble" id="bubble">你好呀</div>
+    <div class="hearts" id="hearts"></div>
+    <button id="grab" aria-label="蓝色鲸鱼桌宠">
+      <svg class="art" viewBox="0 0 210 175" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="body" x1="0" y1="0" x2=".2" y2="1">
+            <stop offset="0" stop-color="#7FB2FF"/>
+            <stop offset=".45" stop-color="#4E86E8"/>
+            <stop offset="1" stop-color="#2F5FC4"/>
+          </linearGradient>
+          <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFFFFF" stop-opacity=".96"/>
+            <stop offset="1" stop-color="#CFE2FF" stop-opacity=".92"/>
+          </linearGradient>
+          <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+            <stop offset="0" stop-color="#9CC6FF" stop-opacity=".55"/>
+            <stop offset="1" stop-color="#9CC6FF" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <g class="flip">
+          <!-- 喷水（庆祝时） -->
+          <g class="spout" transform="translate(96,26)">
+            <path d="M0 34 C-7 20 -3 8 0 0 C3 8 7 20 0 34Z" fill="#BFE0FF" opacity=".95"/>
+            <circle cx="-11" cy="12" r="5" fill="#D6ECFF" opacity=".9"/>
+            <circle cx="12" cy="8" r="6.5" fill="#D6ECFF" opacity=".9"/>
+            <circle cx="0" cy="-4" r="4" fill="#EAF6FF" opacity=".95"/>
+          </g>
+
+          <!-- 尾巴 -->
+          <g class="tail">
+            <path d="M60 104 C40 92 24 84 8 86 C16 96 22 106 20 118 C34 118 48 114 60 108 Z"
+                  fill="#3B6FD4"/>
+            <path d="M60 104 C46 96 34 90 22 89 C30 98 34 106 33 115 C44 114 53 110 60 108 Z"
+                  fill="#5E92EE" opacity=".85"/>
+          </g>
+
+          <!-- 身体 -->
+          <ellipse cx="112" cy="102" rx="76" ry="52" fill="url(#body)"/>
+          <ellipse cx="112" cy="102" rx="76" ry="52" fill="url(#glow)"/>
+          <!-- 背部高光 -->
+          <path d="M52 74 C74 52 150 50 178 72 C150 62 80 63 52 74 Z" fill="#A8CCFF" opacity=".55"/>
+          <!-- 肚皮 -->
+          <ellipse cx="118" cy="120" rx="54" ry="30" fill="url(#belly)"/>
+
+          <!-- 侧鳍 -->
+          <path d="M104 124 C96 140 100 152 112 156 C118 146 120 134 118 124 Z" fill="#3A6CD0"/>
+          <path d="M150 118 C160 130 162 142 156 150 C148 142 144 130 144 120 Z" fill="#3565C6" opacity=".9"/>
+
+          <!-- 嘴/微笑 -->
+          <path d="M148 118 C156 122 160 126 158 130" stroke="#28457F" stroke-width="3"
+                stroke-linecap="round" fill="none" opacity=".85"/>
+
+          <!-- 眼睛 -->
+          <ellipse cx="150" cy="86" rx="10.5" ry="13" fill="#16233D"/>
+          <circle cx="154" cy="81" r="3.6" fill="#FFFFFF"/>
+          <circle cx="147" cy="91" r="1.9" fill="#FFFFFF" opacity=".7"/>
+          <ellipse cx="118" cy="88" rx="8" ry="10" fill="#16233D" opacity=".92"/>
+          <circle cx="121" cy="84" r="2.8" fill="#FFFFFF"/>
+
+          <!-- 腮红 -->
+          <ellipse cx="136" cy="110" rx="9.5" ry="6" fill="#FF9DB8" opacity=".5"/>
+          <ellipse cx="169" cy="104" rx="7" ry="4.6" fill="#FF9DB8" opacity=".45"/>
+
+          <!-- 头顶小天线（呆毛） -->
+          <path d="M104 56 C104 48 108 43 114 42" stroke="#4E86E8" stroke-width="3.5"
+                stroke-linecap="round" fill="none"/>
+          <circle cx="115" cy="41" r="5" fill="#9CC6FF"/>
+
+          <!-- 星星（庆祝） -->
+          <g class="sparks">
+            <circle cx="30" cy="52" r="4.5" fill="#FFD98A"/>
+            <circle cx="192" cy="70" r="3.5" fill="#FFD98A"/>
+            <circle cx="178" cy="34" r="3" fill="#FFE9B0"/>
+          </g>
+        </g>
+
+        <!-- 睡觉的 Z（不镜像） -->
+        <g class="zzz" fill="#CFE0FF" font-family="ui-rounded, system-ui" font-weight="700">
+          <text x="16" y="60" font-size="16">z</text>
+          <text x="0" y="40" font-size="20" style="animation-delay:.5s">z</text>
+          <text x="-16" y="18" font-size="24" style="animation-delay:1s">Z</text>
+        </g>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="hud">
+  <h1>蓝色大肥鲸 · 行为原型</h1>
+  <p>独立 HTML，不依赖 DSH。用于先定「形象 + 行为」，再决定走窗口内插件还是真·桌面悬浮窗。</p>
+  <div class="row" id="states">
+    <button data-s="idle">待机</button>
+    <button data-s="work">工作中</button>
+    <button data-s="waiting">等你</button>
+    <button data-s="celebrate">完成</button>
+    <button data-s="error">报错</button>
+    <button data-s="sleep">睡觉</button>
+  </div>
+  <div class="row">
+    <button id="toggle-wander" aria-pressed="true">自动游走：开</button>
+    <button id="toggle-click" aria-pressed="true">穿透空白区：开</button>
+  </div>
+  <div class="stat">
+    状态 <b id="s-state">idle</b> · 坐标 <b id="s-pos">0,0</b> · 朝向 <b id="s-dir">→</b><br>
+    下一步 <b id="s-next">—</b> · 帧率 <b id="s-fps">—</b>
+  </div>
+  <div class="note">拖动鲸鱼可移动；单击摸头；双击让它睡／醒。</div>
+</div>
+
+<script type="module">
+const pet     = document.getElementById('pet');
+const grab    = document.getElementById('grab');
+const bubble  = document.getElementById('bubble');
+const hearts  = document.getElementById('hearts');
+const stage   = document.getElementById('stage');
+
+const el = {
+  state: document.getElementById('s-state'),
+  pos:   document.getElementById('s-pos'),
+  dir:   document.getElementById('s-dir'),
+  next:  document.getElementById('s-next'),
+  fps:   document.getElementById('s-fps'),
+};
+
+/* ─────────────────────────────────────────────────────────────
+   行为状态机
+   真实插件里，这些状态由 DSH 事件驱动：
+     agent/status running     → work
+     工具等待批准 / 提问       → waiting
+     一轮正常结束             → celebrate
+     agent/error              → error
+     无活动 N 分钟             → sleep
+   这里用定时器模拟同一套输入。
+   ───────────────────────────────────────────────────────────── */
+const bubbleText = {
+  idle:      ['在呢～', '慢慢来', '要不要歇会儿'],
+  work:      ['正在努力！', '交给我吧', '我盯着呢'],
+  waiting:   ['需要你确认', '等你决定哦', '看一眼这里'],
+  celebrate: ['搞定啦！', '又完成一个', '棒！'],
+  error:     ['出问题了…', '这里不太对', '要看看吗'],
+  sleep:     ['Zzz…', '我先眯一会儿'],
+  patted:    ['嘿嘿', '好舒服', '再摸摸'],
+};
+
+const petState = {
+  name: 'idle',          // 当前状态
+  manual: false,         // 用户手动锁定状态时，自动状态机不覆盖
+  x: 0, y: 0,            // 位置（左上角）
+  dir: 1,                // 1 = 向右, -1 = 向左
+  vx: 0,                 // 当前速度 px/s
+  target: null,          // 游走目标
+  wander: true,
+  clickThrough: true,
+  nextDecisionAt: 0,
+  sleeping: false,
+  drag: null,
+  fps: 0,
+};
+
+const SIZE = { w: 168, h: 140 };
+
+function setState(name, { force = false } = {}) {
+  if (petState.manual && !force && name !== 'patted') return;
+  petState.name = name;
+  pet.dataset.state = name;
+  el.state.textContent = name;
+}
+
+function say(text, ms = 2200) {
+  bubble.textContent = text;
+  pet.dataset.bubble = '1';
+  clearTimeout(say._t);
+  say._t = setTimeout(() => { pet.dataset.bubble = '0'; }, ms);
+}
+
+function randomLine(state) {
+  const pool = bubbleText[state] || bubbleText.idle;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/* ── 游走决策：每次走一小段，或原地待机/睡觉 ── */
+function decide(now) {
+  const maxX = Math.max(0, stage.clientWidth - SIZE.w);
+  const roll = Math.random();
+
+  if (petState.sleeping) { petState.target = null; petState.nextDecisionAt = now + 2500; return; }
+  if (roll < 0.16) {                       // 原地待机
+    petState.target = null;
+    setState('idle');
+    if (Math.random() < 0.35) say(randomLine('idle'));
+  } else if (roll < 0.23) {                // 打盹
+    setState('sleep');
+    petState.target = null;
+  } else {                                 // 走向一个新位置
+    const margin = SIZE.w * 0.5;
+    const next = margin + Math.random() * Math.max(1, maxX - margin * 2);
+    petState.target = Math.max(0, Math.min(maxX, next));
+    setState('walk');
+  }
+  petState.nextDecisionAt = now + (2200 + Math.random() * 4200);
+}
+
+/* ── 主循环 ── */
+let last = performance.now();
+let fpsAccum = 0, fpsFrames = 0;
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  fpsAccum += dt; fpsFrames++;
+  if (fpsAccum >= 0.5) { petState.fps = Math.round(fpsFrames / fpsAccum); fpsAccum = 0; fpsFrames = 0; el.fps.textContent = petState.fps; }
+
+  if (!petState.drag) {
+    // 决策
+    if (!petState.manual && petState.wander && now >= petState.nextDecisionAt) decide(now);
+
+    // 移动
+    if (petState.target !== null && petState.name === 'walk') {
+      const dx = petState.target - petState.x;
+      const dist = Math.abs(dx);
+      if (dist < 2) {
+        petState.x = petState.target;
+        petState.target = null;
+        setState('idle');
+      } else {
+        // 起步/刹车缓动，鲸鱼有质量感
+        const speed = Math.min(190, 40 + dist * 0.9);
+        petState.vx = Math.sign(dx) * speed;
+        petState.x += petState.vx * dt;
+        const dir = Math.sign(dx);
+        if (dir !== petState.dir) { petState.dir = dir; pet.dataset.dir = String(dir); }
+      }
+    } else {
+      petState.vx = 0;
+    }
+  }
+
+  // 贴地平线（底部 22% 处）+ 轻微上下漂
+  const groundY = stage.clientHeight * 0.78 - SIZE.h;
+  petState.y = groundY;
+
+  pet.style.transform = `translate3d(${petState.x.toFixed(2)}px, ${petState.y.toFixed(2)}px, 0)`;
+
+  el.pos.textContent = `${Math.round(petState.x)}, ${Math.round(petState.y)}`;
+  el.dir.textContent = petState.dir > 0 ? '→' : '←';
+  if (petState.target !== null) el.next.textContent = `走到 x=${Math.round(petState.target)}`;
+  else if (petState.sleeping) el.next.textContent = '睡醒再说';
+  else el.next.textContent = `${Math.max(0, ((petState.nextDecisionAt - now) / 1000)).toFixed(1)}s 后再决定`;
+
+  requestAnimationFrame(frame);
+}
+
+/* ── 交互：拖动 ── */
+grab.addEventListener('pointerdown', (e) => {
+  grab.setPointerCapture(e.pointerId);
+  petState.drag = {
+    id: e.pointerId,
+    dx: e.clientX - petState.x, dy: e.clientY - petState.y,
+    sx: e.clientX, sy: e.clientY,
+    moved: false, at: performance.now(),
+  };
+  pet.dataset.drag = '1';
+});
+grab.addEventListener('pointermove', (e) => {
+  const d = petState.drag;
+  if (!d || d.id !== e.pointerId) return;
+  if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 4) d.moved = true;
+  petState.x = Math.max(0, Math.min(stage.clientWidth - SIZE.w, e.clientX - d.dx));
+  petState.y = Math.max(0, Math.min(stage.clientHeight - SIZE.h, e.clientY - d.dy));
+  // 拖到哪就停哪，松手前不贴地
+  pet.style.transform = `translate3d(${petState.x}px, ${petState.y}px, 0)`;
+});
+function endDrag(e) {
+  const d = petState.drag;
+  if (!d || d.id !== e.pointerId) return;
+  petState.drag = null;
+  pet.dataset.drag = '0';
+  const quick = performance.now() - d.at < 220 && !d.moved;
+  petState.nextDecisionAt = performance.now() + 900;
+  if (quick) pat();
+}
+grab.addEventListener('pointerup', endDrag);
+grab.addEventListener('pointercancel', endDrag);
+
+/* ── 交互：摸头 / 双击睡觉 ── */
+function pat() {
+  for (let i = 0; i < 3; i++) {
+    const s = document.createElement('span');
+    s.textContent = '❤';
+    s.style.left = `${38 + i * 12}%`;
+    s.style.animationDelay = `${i * 90}ms`;
+    hearts.appendChild(s);
+    setTimeout(() => s.remove(), 1400);
+  }
+  const before = petState.name;
+  setState('patted', { force: true });
+  say(randomLine('patted'), 1500);
+  setTimeout(() => setState(petState.sleeping ? 'sleep' : (before === 'patted' ? 'idle' : before), { force: true }), 1000);
+}
+
+grab.addEventListener('dblclick', () => {
+  petState.sleeping = !petState.sleeping;
+  setState(petState.sleeping ? 'sleep' : 'idle', { force: true });
+  say(petState.sleeping ? '那我去睡啦' : '我醒了！', 1600);
+});
+
+/* ── HUD：手动切状态，模拟 DSH 事件 ── */
+document.getElementById('states').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const s = btn.dataset.s;
+  petState.manual = s !== 'idle' || petState.manual;
+  if (s === 'idle') { petState.manual = false; petState.sleeping = false; }
+  petState.sleeping = s === 'sleep';
+  petState.target = null;
+  setState(s, { force: true });
+  say(randomLine(s), 2400);
+  petState.nextDecisionAt = performance.now() + 2600;
+  for (const b of document.querySelectorAll('#states button')) b.setAttribute('aria-pressed', String(b === btn));
+});
+
+const wBtn = document.getElementById('toggle-wander');
+wBtn.addEventListener('click', () => {
+  petState.wander = !petState.wander;
+  wBtn.setAttribute('aria-pressed', String(petState.wander));
+  wBtn.textContent = `自动游走：${petState.wander ? '开' : '关'}`;
+  if (!petState.wander) { petState.target = null; setState('idle'); }
+  else petState.nextDecisionAt = performance.now();
+});
+
+const cBtn = document.getElementById('toggle-click');
+cBtn.addEventListener('click', () => {
+  petState.clickThrough = !petState.clickThrough;
+  cBtn.setAttribute('aria-pressed', String(petState.clickThrough));
+  cBtn.textContent = `穿透空白区：${petState.clickThrough ? '开' : '关'}`;
+  stage.style.pointerEvents = petState.clickThrough ? 'none' : 'auto';
+  grab.style.pointerEvents = 'auto';
+});
+
+/* ── 模拟 DSH 的 agent 事件流，让状态自己跳 ── */
+const DEMO = ['work', 'work', 'waiting', 'work', 'celebrate', 'idle', 'work', 'error', 'idle', 'sleep'];
+let di = 0;
+setInterval(() => {
+  if (petState.manual || petState.drag) return;
+  if (Math.random() < 0.42) {
+    const s = DEMO[di++ % DEMO.length];
+    petState.sleeping = s === 'sleep';
+    petState.target = null;
+    petState.nextDecisionAt = performance.now() + 2600;
+    setState(s);
+    say(randomLine(s), 2200);
+  }
+}, 9000);
+
+/* ── 启动 ── */
+function boot() {
+  petState.x = Math.max(0, stage.clientWidth * 0.5 - SIZE.w / 2);
+  petState.y = stage.clientHeight * 0.78 - SIZE.h;
+  petState.nextDecisionAt = performance.now() + 1200;
+  setState('idle', { force: true });
+  requestAnimationFrame(frame);
+}
+boot();
+addEventListener('resize', () => {
+  petState.x = Math.min(petState.x, Math.max(0, stage.clientWidth - SIZE.w));
+});
+</script>
+</body>
+</html>

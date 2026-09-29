@@ -1,0 +1,58 @@
+{
+  "name": "dsh-deskpet",
+  "version": "0.1.0",
+  "description": "一只常驻 macOS 桌面、随 DeepSeek Harness 状态变化的蓝色大肥鲸桌宠",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "helper",
+    "assets",
+    "tools",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build:client": "node client/build.mjs",
+    "build:placeholder-atlas": "node tools/make-placeholder-atlas.mjs",
+    "atlas:assemble": "node tools/assemble-atlas.mjs",
+    "atlas:install": "node tools/install-atlas.mjs",
+    "prepare:electron": "node tools/ensure-electron.mjs",
+    "build": "node tools/make-placeholder-atlas.mjs && node client/build.mjs",
+    "test": "node tools/test-host.mjs && node tools/test-client.mjs && node tools/test-atlas.mjs"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "desktop-pet",
+    "pet",
+    "whale"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  }
+}

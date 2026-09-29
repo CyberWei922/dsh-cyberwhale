@@ -1,0 +1,12 @@
+# 依赖与构建产物
+node_modules/
+runtime/
+
+# 调研资料与第三方下载包（体积大、且是别人的代码，不入库）
+.research/
+reference/
+*.tgz
+
+# 系统
+.DS_Store
+*.log

@@ -1,0 +1,111 @@
+/* 桌宠窗口：整页透明，只有画布上的宠物会吃鼠标事件。 */
+:root {
+  color-scheme: dark light;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  /* 页面本身永不拦截事件；可交互性由主进程按命中区切换。 */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+#stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+/* 画布尺寸由 JS 按「视觉缩放」设置，并以底边中点锚定（bottom 也由 JS 写入，
+   与脚本里的 MARGIN 保持同一来源）。
+   为什么不用 inset:0 + 100%：那会让画布永远被拉伸填满窗口，窗口一变尺寸，
+   还没重建的旧位图就会被拉扯到新大小 —— 那一帧就是肉眼看到的"闪现到别处"。
+   锚定之后，窗口尺寸变化时画布自身纹丝不动，只有内容在平滑地长大。 */
+#pet {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  translate: -50% 0;
+  pointer-events: none;
+  image-rendering: auto;
+}
+
+/* 气泡：宠物上方，默认隐藏。 */
+#bubble {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  transform-origin: 50% 100%;
+  max-width: calc(100% - 12px);
+  padding: 7px 12px 8px;
+  border-radius: 14px;
+  background: #f6f9ff;
+  color: #23314f;
+  font: 500 12.5px/1.45 -apple-system, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 6px 18px #0b152833;
+  opacity: 0;
+  transition: opacity 0.18s ease, translate 0.18s ease;
+  pointer-events: none;
+}
+
+#bubble[data-visible='1'] {
+  opacity: 1;
+  translate: -50% -4px;
+}
+
+/* 气泡的小尾巴 */
+#bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: #f6f9ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  #bubble {
+    background: #2b3242;
+    color: #e8eefc;
+    box-shadow: 0 6px 20px #00000055;
+  }
+
+  #bubble::after {
+    background: #2b3242;
+  }
+}
+
+/* 素材缺失时的提示（只在开发/出错时出现） */
+#fallback {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 10px;
+  color: #7f8fae;
+  font: 500 11px/1.5 -apple-system, "PingFang SC", system-ui, sans-serif;
+  text-align: center;
+}
+
+#fallback[data-visible='1'] {
+  display: grid;
+}

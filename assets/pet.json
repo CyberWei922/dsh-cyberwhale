@@ -1,0 +1,7 @@
+{
+  "id": "whale",
+  "displayName": "大肥鲸",
+  "description": "一只陪你在桌面上写代码的蓝色鲸鱼。",
+  "spriteVersionNumber": 2,
+  "spritesheetPath": "spritesheet.png"
+}
