@@ -21,6 +21,7 @@ import {
   assemble,
   discoverFrames,
   hasOpaqueBorder,
+  matchRowFromStem,
   normalizeName,
   parseArguments,
   parseKeyColor,
@@ -175,6 +176,31 @@ try {
     check('空格转连字符', normalizeName('Running Right'), 'running-right');
     check('下划线转连字符', normalizeName('running_right'), 'running-right');
     check('去首尾空白', normalizeName('  idle  '), 'idle');
+  }
+
+  // ── 文件名匹配（一张一张交付时命名会很随意）────────────────────────────
+  console.log('\n[4b] 文件名里的动作识别');
+  {
+    const cases = [
+      ['idle-0', 0], ['idle_0', 0], ['whale-idle-0', 0], ['鲸鱼_待机_3', 0], ['待机-2', 0],
+      ['running-right-3', 1], ['向右-5', 1], ['whale_running_right_2', 1],
+      ['running-left-3', 2], ['向左-1', 2],
+      // 关键消歧：running 行不能被 running-right / running-left 抢走
+      ['running-4', 7], ['running_2', 7], ['干活-1', 7],
+      ['waving-0', 3], ['挥手-2', 3],
+      ['jumping-1', 4], ['jump_0', 4],
+      ['failed-6', 5], ['出错-2', 5],
+      ['waiting-4', 6], ['review-5', 8],
+      ['look-a-3', 9], ['look-b-3', 10],
+      ['bogus-0', undefined], ['frame-12', undefined],
+    ];
+    let wrong = [];
+    for (const [stem, expected] of cases) {
+      if (matchRowFromStem(stem) !== expected) wrong.push(stem);
+    }
+    check(`全部 ${cases.length} 个命名都能正确识别`, wrong.join(', '), '');
+    check('长别名优先（running-right 不被 right 抢走）', matchRowFromStem('running-right-0'), 1);
+    check('短别名仍可单独命中', matchRowFromStem('right-0'), 1);
   }
 
   // ── 帧发现 ────────────────────────────────────────────────────────────

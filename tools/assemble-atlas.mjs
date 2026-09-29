@@ -90,6 +90,55 @@ export function normalizeName(value) {
   return value.trim().toLowerCase().replace(/[\s_]+/g, '-');
 }
 
+/**
+ * 别名按长度从长到短排。
+ *
+ * 必须长的优先：`running-right` 要先于 `right` 和 `running` 被匹配到，
+ * 否则 `running-right-3.png` 会被误判成 `right` 行。
+ */
+const ALIASES_LONGEST_FIRST = (() => {
+  const entries = [];
+  for (const spec of ROW_SPECS) {
+    for (const alias of spec.aliases) {
+      entries.push({ row: spec.row, tokens: normalizeName(alias).split('-').filter(Boolean), length: normalizeName(alias).length });
+    }
+  }
+  return entries.sort((a, b) => b.length - a.length);
+})();
+
+/** tokens 里是否按顺序出现过 needle（允许中间夹别的词）。 */
+function containsTokens(tokens, needle) {
+  if (needle.length === 0 || needle.length > tokens.length) return false;
+  for (let start = 0; start + needle.length <= tokens.length; start += 1) {
+    let ok = true;
+    for (let offset = 0; offset < needle.length; offset += 1) {
+      if (tokens[start + offset] !== needle[offset]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+
+/**
+ * 从文件名（去掉扩展名、去掉末尾序号）里认出动作行号。
+ *
+ * 宽松匹配：`idle-0`、`whale-idle-0`、`鲸鱼_待机_3` 都能认出来。
+ * 只要归一化后的词序列里按顺序出现过某个别名即可。
+ */
+export function matchRowFromStem(stem) {
+  const tokens = normalizeName(stem).split('-').filter(Boolean);
+  // 去掉末尾的纯数字（帧号）
+  while (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1])) tokens.pop();
+  if (tokens.length === 0) return undefined;
+  for (const entry of ALIASES_LONGEST_FIRST) {
+    if (containsTokens(tokens, entry.tokens)) return entry.row;
+  }
+  return undefined;
+}
+
 // ── 参数 ──────────────────────────────────────────────────────────────────
 export const DEFAULT_OPTIONS = {
   framesDir: null,
@@ -183,7 +232,7 @@ export async function discoverFrames(framesDir) {
     if (entry.name.startsWith('.')) continue;
 
     if (entry.isDirectory()) {
-      const row = ALIAS_TO_ROW.get(normalizeName(entry.name));
+      const row = ALIAS_TO_ROW.get(normalizeName(entry.name)) ?? matchRowFromStem(entry.name);
       if (row === undefined) {
         unknown.push(`${entry.name}/（目录名不是已知动作）`);
         continue;
@@ -204,13 +253,11 @@ export async function discoverFrames(framesDir) {
       continue;
     }
 
-    // 平铺命名：取「末尾数字之前」的部分作为动作名
+    // 平铺命名：支持 `idle-0.png`、`whale-idle-0.png`、`鲸鱼_待机_3.png` 等
     const stem = entry.name.slice(0, -extension.length);
-    const cut = stem.search(/\d+$/);
-    const label = (cut > 0 ? stem.slice(0, cut) : stem).replace(/[-_.]+$/, '');
-    const row = ALIAS_TO_ROW.get(normalizeName(label));
+    const row = matchRowFromStem(stem);
     if (row === undefined) {
-      unknown.push(`${entry.name}（文件名里的动作名无法识别）`);
+      unknown.push(`${entry.name}（文件名里认不出动作）—— 请把动作名写进文件名，或按动作分目录`);
       continue;
     }
     push(row, join(framesDir, entry.name));

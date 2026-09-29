@@ -43,6 +43,26 @@ frames/
 
 共 11 个动作、68 帧。
 
+### 命名可以很随意
+
+**不必为每个动作建目录。** 只要文件名里能看出是哪个动作就行，下面这些全都能认：
+
+```
+idle-0.png        idle_0.png        whale-idle-0.png      鲸鱼_待机_3.png
+running-right-3.png   run-right-3.png   向右-5.png
+running-4.png     running_2.png     干活-1.png
+waving-0.png      挥手-2.png        jumping-1.png
+failed-6.png      出错-2.png        waiting-4.png
+review-5.png      look-a-3.png      look-b-3.png
+```
+
+**注意区分这两个：**
+
+- `running-right-3.png` → 向右移动那一行
+- `running-3.png` → 干活中那一行
+
+只要写清楚是哪个动作即可，序号放最后。
+
 ---
 
 ## 3. 硬性规格（这次的核心，务必逐条遵守）
