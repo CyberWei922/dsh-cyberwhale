@@ -65,6 +65,8 @@ const BUBBLES = {
 
 const LOOK_IDLE_MS = 1600; // 光标静止多久后放弃注视
 const LOOK_ROWS = [9, 10];
+/** 每行注视方向的帧数。两行共 16 个方向，覆盖顺时针一整圈。 */
+const LOOK_FRAMES_PER_ROW = 8;
 
 // ── DOM ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('pet');
@@ -256,7 +258,10 @@ function currentLookFrame() {
   const degrees = (Math.atan2(dx, -dy) * 180) / Math.PI;
   const normalized = (degrees + 360) % 360;
   const index = Math.round(normalized / 22.5) % 16;
-  return { row: LOOK_ROWS[Math.floor(index / 8)], col: index % 8 };
+  return {
+    row: LOOK_ROWS[Math.floor(index / LOOK_FRAMES_PER_ROW)],
+    col: index % LOOK_FRAMES_PER_ROW,
+  };
 }
 
 function currentAnimationFrame(now) {

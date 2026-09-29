@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import {
   CELL_HEIGHT,
   CELL_WIDTH,
+  ROW_SPECS,
   chromaKey,
   assemble,
   discoverFrames,
@@ -474,8 +475,75 @@ try {
     check('整体标记为不完整', report.complete, false);
   }
 
+  // ── 规格 vs 渲染器：必须完全一致 ──────────────────────────────────────
+  console.log('\n[12] 帧数规格与渲染器一致');
+  {
+    const rendererSource = await readFile(new URL('../helper/renderer/pet.js', import.meta.url), 'utf8');
+
+    const block = /const ANIMATIONS = \{([\s\S]*?)\n\};/.exec(rendererSource)[1];
+    const rendererRows = new Map();
+
+    for (const rawLine of block.split('\n')) {
+      const line = rawLine.trim().replace(/,$/, '');
+      if (line === '' || line.startsWith('//')) continue;
+
+      const keyed = /^'?([a-z-]+)'?:\s*\{(.*)\}$/.exec(line);
+      if (keyed !== null) {
+        const row = Number(/row:\s*(\d+)/.exec(keyed[2])[1]);
+        const cols = /cols:\s*\[([^\]]*)\]/.exec(keyed[2])[1];
+        rendererRows.set(row, {
+          name: keyed[1],
+          count: cols.split(',').map((value) => value.trim()).filter(Boolean).length,
+        });
+        continue;
+      }
+
+      const animated = /^'?([a-z-]+)'?:\s*rowAnimation\((\d+),\s*(\d+),/.exec(line);
+      if (animated !== null) {
+        rendererRows.set(Number(animated[2]), { name: animated[1], count: Number(animated[3]) });
+      }
+    }
+
+    // 注视方向的两行不在 ANIMATIONS 里，由 LOOK_ROWS + 每行帧数决定
+    const lookRows = /const LOOK_ROWS = \[([^\]]*)\]/
+      .exec(rendererSource)[1]
+      .split(',')
+      .map((value) => Number(value.trim()));
+    const lookPerRow = Number(/const LOOK_FRAMES_PER_ROW = (\d+)/.exec(rendererSource)[1]);
+    lookRows.forEach((row, index) => {
+      rendererRows.set(row, { name: index === 0 ? 'look-a' : 'look-b', count: lookPerRow });
+    });
+
+    check('渲染器里解析出 11 行', rendererRows.size, 11);
+
+    const mismatches = [];
+    let total = 0;
+    for (const spec of ROW_SPECS) {
+      const actual = rendererRows.get(spec.row);
+      if (actual === undefined) {
+        mismatches.push(`第 ${spec.row} 行在渲染器里不存在`);
+        continue;
+      }
+      if (actual.count !== spec.expected) {
+        mismatches.push(`${spec.name} 帧数：规格 ${spec.expected} / 渲染器 ${actual.count}`);
+      }
+      if (actual.name !== spec.name) {
+        mismatches.push(`第 ${spec.row} 行名字：规格 ${spec.name} / 渲染器 ${actual.name}`);
+      }
+      total += spec.expected;
+    }
+    check('每行的名字与帧数都一致', mismatches.join('；'), '');
+
+    // 这一条是被实际踩过的坑：文档里手写总数，写错成 68（实际 73）。
+    // 让文档和规格对不上时直接测试失败。
+    check('总帧数为 73', total, 73);
+    const plan = await readFile(new URL('../docs/pet-atlas-repair-plan.md', import.meta.url), 'utf8');
+    const stated = /共 11 个动作、(\d+) 帧/.exec(plan);
+    check('返工方案里写的总帧数与规格一致', Number(stated?.[1]), total);
+  }
+
   // ── 直接执行 vs 被导入 ────────────────────────────────────────────────
-  console.log('\n[12] 被导入时不应执行 CLI');
+  console.log('\n[13] 被导入时不应执行 CLI');
   {
     // 能 import 到函数本身就说明没有在导入时跑 main()（跑了会 process.exit / 打印一堆东西）
     check('导出了 assemble', typeof assemble, 'function');
