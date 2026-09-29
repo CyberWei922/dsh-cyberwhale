@@ -1,5 +1,22 @@
 'use strict';
 
+// 几何计算全部来自纯模块 `geometry.js`，可被单元测试覆盖。
+// 位置限制这类逻辑埋在 main.js 里时只能靠肉眼看，"拖不上去"的 bug 就一直没被发现。
+//
+// 必须放在文件最前面：这是 `const` 解构，有 TDZ —— 一旦写在任何使用之后，
+// 整个助手进程会启动即崩（`Cannot access 'clamp' before initialization`）。
+// 纯单元测试抓不到这种问题，只有真机启动能发现。
+const {
+  CELL,
+  MARGIN,
+  BUBBLE_SPACE,
+  ENVELOPE_SCALE,
+  clamp,
+  computeMetrics,
+  clampToArea,
+} = require('./geometry.js');
+
+
 /**
  * dsh-deskpet 助手进程（Electron 主进程）。
  *
@@ -45,43 +62,6 @@ const bubbles = readArg('bubbles', '1') === '1';
 const startX = Number(readArg('x', 'NaN'));
 const startY = Number(readArg('y', 'NaN'));
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-/** 图集单元格尺寸（与 pet.json / 官方契约一致）。 */
-const CELL = { width: 192, height: 208 };
-/** 四周留白，给视差与阴影一点空间。 */
-const MARGIN = 14;
-/** 宠物上方为气泡预留的高度。 */
-const BUBBLE_SPACE = 74;
-
-/** 依给定缩放算出窗口与宠物尺寸。 */
-function computeMetrics(value) {
-  const petWidth = Math.round(CELL.width * value);
-  const petHeight = Math.round(CELL.height * value);
-  return {
-    petWidth,
-    petHeight,
-    width: petWidth + MARGIN * 2,
-    height: petHeight + MARGIN * 2 + Math.round(BUBBLE_SPACE * value),
-  };
-}
-
-/**
- * 窗口尺寸按「最大档位」固定，之后**永不改变**。
- *
- * 为什么不让窗口跟着缩放走：macOS 在透明窗口尺寸变化时会重新分配绘制表面，
- * 重建期间的那一帧可能被当作不透明合成 —— 压在窗口下面的东西（比如设置面板）
- * 就会暗一下。窗口尺寸固定后这件事根本不会发生。
- *
- * 代价是窗口比小档位下的宠物大一些。但点击穿透是按命中区翻转的：
- * 指针一离开宠物身体就立刻恢复穿透，所以实际影响可以忽略。
- * 这也是 Codex 的做法 —— 它的宠物窗口 384×400，而形象只有 112×121。
- *
- * 注意：这个值必须 ≥ 设置里允许的最大缩放（LIMITS.scale.max）。
- */
-const ENVELOPE_SCALE = 1.6;
 
 let metrics = computeMetrics(ENVELOPE_SCALE);
 
@@ -134,13 +114,15 @@ function defaultPosition() {
   };
 }
 
+/**
+ * 就地把窗口位置限制到「宠物完整落在工作区内」。
+ *
+ * 找哪块屏幕与具体几何限制分别由 `screen` 与 `geometry.clampToArea` 负责 ——
+ * 后者是纯函数，所以限制逻辑本身有单元测试盯着（这个 bug 当初就是这么漏掉的）。
+ */
 function clampToDisplay(x, y) {
-  const display = screen.getDisplayNearestPoint({ x, y });
-  const area = display.workArea;
-  return {
-    x: clamp(x, area.x - Math.round(metrics.width * 0.5), area.x + area.width - Math.round(metrics.width * 0.5)),
-    y: clamp(y, area.y, area.y + area.height - Math.round(metrics.height * 0.5)),
-  };
+  const area = screen.getDisplayNearestPoint({ x, y }).workArea;
+  return clampToArea(x, y, metrics, scale, area);
 }
 
 function createWindow() {
@@ -190,11 +172,16 @@ function createWindow() {
   win.once('ready-to-show', () => {
     win.showInactive();
     startCursorTracking();
+    // 带上窗口的**实际**位置：`clampToDisplay` 之后系统可能不完全照办，
+    // 排「拖不上去」这类问题时，有这个值才能分清是限制算错了还是系统不认。
+    const [actualX, actualY] = win.getPosition();
     toHost({
       t: 'ready',
       pid: process.pid,
       scale,
       metrics,
+      x: actualX,
+      y: actualY,
       platform: process.platform,
       electron: process.versions.electron,
     });

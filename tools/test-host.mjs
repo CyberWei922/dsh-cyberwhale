@@ -409,58 +409,6 @@ check('正常请求返回 200', okBody.status, 200);
 check('信封形状正确', JSON.parse(okBody.body).type, 'server-response');
 check('回显 rpcId', JSON.parse(okBody.body).rpcId, 'abc');
 
-console.log('\n[7b] 主进程与渲染层的布局常量必须一致');
-{
-  const { readFile } = await import('node:fs/promises');
-  const mainSrc = await readFile(new URL('../helper/main.js', import.meta.url), 'utf8');
-  const petSrc = await readFile(new URL('../helper/renderer/pet.js', import.meta.url), 'utf8');
-
-  const numberIn = (src, source, name) => {
-    const found = new RegExp(`const ${name} = (\\d+)`).exec(src);
-    return found === null ? undefined : Number(found[1]);
-  };
-
-  for (const constant of ['MARGIN', 'BUBBLE_SPACE']) {
-    const inMain = numberIn(mainSrc, 'main.js', constant);
-    const inPet = numberIn(petSrc, 'pet.js', constant);
-    check(`${constant} 两边一致（${inMain}）`, inMain === undefined ? 'missing' : inMain === inPet, true);
-  }
-
-  // pet.css 里的 bottom 是与 MARGIN 相同的兜底值（JS 会再写一次），
-  // 漂移了会让人以为有两个来源。
-  const cssSrc = await readFile(new URL('../helper/renderer/pet.css', import.meta.url), 'utf8');
-  const cssBottom = Number(/bottom:\s*(\d+)px/.exec(cssSrc)?.[1]);
-  check('pet.css 的 bottom 兜底值等于 MARGIN', cssBottom, numberIn(petSrc, 'pet.js', 'MARGIN'));
-
-  const cellIn = (src) => {
-    const found = /const CELL = \{ width: (\d+), height: (\d+) \}/.exec(src);
-    return found === null ? undefined : `${found[1]}x${found[2]}`;
-  };
-  check('CELL 两边一致', cellIn(mainSrc) === cellIn(petSrc), true);
-  check('CELL 是契约尺寸 192x208', cellIn(mainSrc), '192x208');
-
-  // 关键不变量：窗口包络必须 ≥ 允许的最大缩放，
-  // 否则大档位下宠物会被固定尺寸的窗口裁掉。
-  const { LIMITS } = await import('../lib/settings.js');
-  const envelope = Number(/const ENVELOPE_SCALE = ([\d.]+)/.exec(mainSrc)?.[1]);
-  check('主进程的窗口包络存在', Number.isFinite(envelope), true);
-  check(
-    `窗口包络（${envelope}）≥ 允许的最大缩放（${LIMITS.scale.max}）`,
-    envelope >= LIMITS.scale.max,
-    true,
-  );
-
-  // 主进程算出的窗口宽度必须等于「宠物宽度 + 两侧留白」，
-  // 否则渲染层按窗口宽度居中时会偏。
-  const margin = numberIn(mainSrc, 'main.js', 'MARGIN');
-  const cell = /const CELL = \{ width: (\d+)/.exec(mainSrc);
-  const widthFor = (scale) => Math.round(Number(cell[1]) * scale) + margin * 2;
-  const formulaInMain = /width: petWidth \+ MARGIN \* 2/.test(mainSrc);
-  check('主进程窗口宽度 = 宠物宽度 + 2×MARGIN', formulaInMain, true);
-  check('宽度公式在 1.0 档下等于 220', widthFor(1), 220);
-  check('宽度公式在 1.6 档下等于 335', widthFor(1.6), 335);
-}
-
 console.log('\n[8] 释放');
 const liveBeforeDispose = spawnedHandles.filter((h) => h.terminated !== true).length;
 check('释放前确实有活着的进程（前提成立）', liveBeforeDispose > 0, true);
