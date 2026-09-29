@@ -68,8 +68,8 @@ export const ROW_SPECS = [
   { row: 6, name: 'waiting', expected: 6, aliases: ['waiting', 'wait', '等待', '等你确认'] },
   { row: 7, name: 'running', expected: 6, aliases: ['running', 'working', 'work', '干活', '思考'] },
   { row: 8, name: 'review', expected: 6, aliases: ['review', '检查', '检查结果'] },
-  { row: 9, name: 'look-a', expected: 8, aliases: ['look-a', 'looka', 'direction-a', 'look-up', '注视a', '注视上'] },
-  { row: 10, name: 'look-b', expected: 8, aliases: ['look-b', 'lookb', 'direction-b', 'look-down', '注视b', '注视下'] },
+  { row: 9, name: 'look-a', expected: 8, aliases: ['look-a', 'looka', 'direction-a', 'look-up', 'gaze-a', 'gazea', '注视a', '注视上'] },
+  { row: 10, name: 'look-b', expected: 8, aliases: ['look-b', 'lookb', 'direction-b', 'look-down', 'gaze-b', 'gazeb', '注视b', '注视下'] },
 ];
 
 /**
@@ -398,8 +398,10 @@ export async function assemble(options) {
         mode: useCanvas ? 'canvas' : 'bottom',
         // canvas 模式保留整张画布（含角色在画布内的位置）；bottom 模式用裁剪后的图
         placement: useCanvas ? image : cropped,
-        // 角色在源画布里的最低点，用来推算该行自己的地面线
+        // 角色在源画布里的上下边界，用来推算该行自己的地面线与实际活动范围
+        contentTop: bounds.top,
         contentBottom: bounds.bottom,
+        contentWidth: bounds.width,
         // 水平对齐用「源画布中轴」，不用「包围盒中轴」：
         // 尾巴/鳍/道具伸出来时，按包围盒居中会把身体推离中轴，看起来就是横向漂移。
         canvasWidth: image.width,
@@ -410,10 +412,31 @@ export async function assemble(options) {
 
   if (frames.length === 0) throw new Error('所有帧都是空的，检查一下图片是不是真的没有内容');
 
+  // 画布锚定的行：算出该行内容的**实际活动范围**（所有帧的并集）。
+  // 按整张画布算会浪费很多尺寸 —— 比如 jumping 的 512×560 画布里，
+  // 角色的活动范围只有 491px 高，按整张画布算会让所有动作白白小 14%。
+  const canvasRowExtent = new Map();
+  for (const spec of ROW_SPECS) {
+    const rowFrames = frames.filter((frame) => frame.row === spec.row && frame.mode === 'canvas');
+    if (rowFrames.length === 0) continue;
+    canvasRowExtent.set(spec.row, {
+      top: Math.min(...rowFrames.map((frame) => frame.contentTop)),
+      bottom: Math.max(...rowFrames.map((frame) => frame.contentBottom)),
+      width: Math.max(...rowFrames.map((frame) => frame.contentWidth)),
+    });
+  }
+
   // ② 全局统一缩放（所有帧同一比例，动画才不会忽大忽小）
-  const required = frames.map((frame) =>
-    Math.min(options.safeWidth / frame.placement.width, options.safeHeight / frame.placement.height),
-  );
+  const required = frames.map((frame) => {
+    if (frame.mode === 'canvas') {
+      const extent = canvasRowExtent.get(frame.row);
+      return Math.min(
+        options.safeWidth / extent.width,
+        options.safeHeight / (extent.bottom - extent.top + 1),
+      );
+    }
+    return Math.min(options.safeWidth / frame.placement.width, options.safeHeight / frame.placement.height);
+  });
   const limitingIndex = required.indexOf(Math.min(...required));
   let scale = options.scale ?? Math.min(...required);
   if (options.scale === null && !options.allowUpscale) scale = Math.min(scale, 1);
@@ -442,17 +465,73 @@ export async function assemble(options) {
         const cellLeft = column * CELL_WIDTH;
         // 水平：让「源画布中轴」落在格子中轴上。
         // 这样多出来的尾巴/鳍不会把身体推偏 —— 换成包围盒中轴就会。
-        const x = cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - frame.bboxLeft) * scale;
+        //
+        // 起点要按摆放对象区分：
+        //   · bottom 模式摆放的是**裁剪后**的图，左边缘在源图 x = bboxLeft 处
+        //   · canvas 模式摆放的是**整张画布**，左边缘就是源图 x = 0
+        // 踩过的坑：两种模式共用 `- (canvasWidth/2 - bboxLeft)*scale`，
+        // 于是 canvas 模式的 bboxLeft 被算了两遍，整行往右偏出格子 ——
+        // 表现是 jumping 内容跑到隔壁列，连垂直的腾空测试都被带崩。
+        const sourceLeft = frame.mode === 'canvas' ? 0 : frame.bboxLeft;
+        const x = cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - sourceLeft) * scale;
         // 垂直：摆放对象的底边距格子底部恰好 margin 像素
         let y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - height;
         if (frame.mode === 'canvas') {
           // 画布模式：让该行的地面线落在格子地面线上，而不是让画布底边贴底。
-          // 画布底部那圈留白（脚线以下的部分）因此会溢出到 margin 里 ——
+          // 画布上下那两圈留白（角色活动范围之外的部分）会溢出到 margin 里 ——
           // 那部分本来就是透明的，不会越出格子。
           y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - groundLines.get(spec.row) * scale;
+          // 保险：万一内容真的会越出格子顶边，就整体下移（宁可重心略低也不能被裁）。
+          const extent = canvasRowExtent.get(frame.row);
+          const contentTopOnScreen = y + extent.top * scale;
+          const cellTop = spec.row * CELL_HEIGHT;
+          if (contentTopOnScreen < cellTop) y += cellTop - contentTopOnScreen;
         }
         drawScaled(frame.placement, atlas, Math.round(x), Math.round(y), scale);
       });
+  }
+
+  // ── 输出自检：每格的内容必须落在自己的格子里，且大致居中 ──────────────
+  //
+  // 这一步是有来历的：曾经横向公式写错（画布锚定把 bboxLeft 算了两遍），
+  // 整个 jumping 行被画到隔壁列去了，而当时的检查只看**输入**图有没有贴边，
+  // 完全没发现。现在直接量**输出**。
+  const geometryIssues = [];
+  for (const spec of ROW_SPECS) {
+    const rowFrames = frames.filter((frame) => frame.row === spec.row);
+    rowFrames.forEach((frame, column) => {
+      const cellLeft = column * CELL_WIDTH;
+      const cellTop = spec.row * CELL_HEIGHT;
+      let minX = CELL_WIDTH;
+      let maxX = -1;
+      let minY = CELL_HEIGHT;
+      let maxY = -1;
+      for (let y = 0; y < CELL_HEIGHT; y += 1) {
+        for (let x = 0; x < CELL_WIDTH; x += 1) {
+          const px = cellLeft + x;
+          const py = cellTop + y;
+          if (atlas.data[(py * atlas.width + px) * 4 + 3] > 8) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < 0) return; // 空格子：由帧数检查负责
+
+      const centerOffset = Math.abs((minX + maxX) / 2 - (CELL_WIDTH - 1) / 2);
+      const epsilon = 6; // 抗锯齿与取整的余量
+      if (minX < epsilon || maxX > CELL_WIDTH - 1 - epsilon) {
+        geometryIssues.push(`${frame.file}：合成后内容贴到格子左右边缘（x∈[${minX},${maxX}]），可能被邻格裁切`);
+      }
+      if (minY < epsilon) {
+        geometryIssues.push(`${frame.file}：合成后内容贴到格子顶边（y=${minY}），会被上一行裁切`);
+      }
+      if (centerOffset > 8) {
+        geometryIssues.push(`${frame.file}：合成后偏离格子中轴 ${centerOffset.toFixed(0)}px`);
+      }
+    });
   }
 
   // canvas 模式下，同一批帧必须来自同样大小的画布，否则对齐会错。
@@ -497,7 +576,8 @@ export async function assemble(options) {
       margin: options.margin,
       // strict 的语义是「必须完全符合契约」—— 包括某一行整行缺失。
       complete: rowCounts.every((row) => row.count === row.expected),
-      hasProblems: problems.length > 0,
+      hasProblems: problems.length > 0 || geometryIssues.length > 0,
+      geometryIssues,
     },
   };
 }
@@ -546,10 +626,11 @@ export function formatReport(report, { dryRun }) {
     }
   }
 
-  if (report.hasProblems) {
-    lines.push('', `⚠️  发现 ${report.problems.length} 处可能的问题：`);
-    for (const problem of report.problems.slice(0, 20)) lines.push(`     ${problem}`);
-    if (report.problems.length > 20) lines.push(`     …还有 ${report.problems.length - 20} 处`);
+  const issues = [...report.problems, ...(report.geometryIssues ?? [])];
+  if (issues.length > 0) {
+    lines.push('', `⚠️  发现 ${issues.length} 处可能的问题：`);
+    for (const problem of issues.slice(0, 20)) lines.push(`     ${problem}`);
+    if (issues.length > 20) lines.push(`     …还有 ${issues.length - 20} 处`);
   } else {
     lines.push('', '✓ 没有发现贴边、缺帧或背景不透明的问题');
   }

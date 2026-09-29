@@ -370,6 +370,18 @@ try {
       bottoms[0] > bottoms[1] && bottoms[1] > bottoms[2] && bottoms[2] > bottoms[3] && bottoms[3] < bottoms[4],
       true);
 
+    // 画布锚定的帧也必须水平居中。
+    // 这里踩过坑：横向公式把 bboxLeft 算了两遍（画布锚定时它不该出现），
+    // 整个 jumping 行被推到隔壁列，连上面的垂直测试都因此串了 ——
+    // 所以这条直接量中轴，不再依赖"内容跑到别处导致别的测试失败"来间接发现。
+    const jumpCenterOffsets = [];
+    for (let column = 0; column < rises.length; column += 1) {
+      const b = cellBounds(atlas, 4, column);
+      if (b !== null) jumpCenterOffsets.push(Math.abs((b.minX + b.maxX) / 2 - (CELL_WIDTH - 1) / 2));
+    }
+    const worstJumpOffset = Math.max(...jumpCenterOffsets);
+    check(`画布锚定的帧水平居中（最大偏移 ${worstJumpOffset.toFixed(1)}px）`, worstJumpOffset <= 2, true);
+
     // 待机帧（包围盒锚定）与跳跃落地帧（画布锚定）必须落在同一条地面线上。
     // 允许 ±2px：降采样会让最外一行只覆盖部分像素，alpha 落到阈值以下，
     // 量出来可能差 1px，这不是错位。

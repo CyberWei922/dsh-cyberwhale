@@ -7,6 +7,9 @@ runtime/
 reference/
 *.tgz
 
+# 图集的散帧源文件（20MB，运行时用不到；成品是 assets/spritesheet.png）
+individual-draft/
+
 # 系统
 .DS_Store
 *.log

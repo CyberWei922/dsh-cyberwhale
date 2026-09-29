@@ -37,8 +37,10 @@
 | 8 | 检查结果 | 0–5 |
 | 9–10 | 16 个注视方向 | 0–7 |
 
-仓库自带一张**程序生成的占位图集**（`assets/spritesheet.png`），
-所以开箱即可运行；正式素材到位后直接替换该文件与 `assets/pet.json` 即可。
+`assets/spritesheet.png` 是**正式图集**：73 帧、由散帧拼装而成（见下面「把散帧拼成图集」）。
+
+仓库还自带一个 `tools/make-placeholder-atlas.mjs`，可以在没有素材时生成一张纯几何的
+占位图集，方便先跑通功能。
 
 ---
 
@@ -254,7 +256,7 @@ node tools/test-host.mjs                # 宿主半的离线集成测试
 node tools/test-client.mjs              # 设置页的测试
 node tools/test-atlas.mjs               # 图集拼装的测试
 node tools/ensure-electron.mjs          # 准备 Electron 运行时
-node tools/make-placeholder-atlas.mjs   # 重新生成占位图集
+node tools/make-placeholder-atlas.mjs   # 生成纯几何占位图集（无素材时用）
 
 npm test                                # 上面三个测试一次跑完
 ```
@@ -334,7 +336,7 @@ docs/                   规格书与技术核实报告
   `ctx.subprocess` 服务契约、不违反任何约束，但未来若该 seam 收紧需要跟进适配。
 - 设置页的导航图标由 DSH 外壳**按分区 id 硬编码**（见 `SettingsRoot.tsx` 的
   `navIcon()`），未知 id 一律回落到通用齿轮。所以「桌宠」页拿不到自己的图标。
-- 正式素材前使用的是占位图，形象仅供功能验证。
+- 形象素材为 AI 生成的二次元鲸鱼，版权归本仓库作者所有。
 - **窗口尺寸固定**（按最大档位 1.6 预留，335×479），缩放只改内容不窗口。
   这么做是为了避开 macOS 在透明窗口改尺寸时重分配绘制表面所导致的闪帧
   （表现为压在下面的窗口暗一下）。代价是小档位下窗口比宠物大 —— 但穿透按命中区
