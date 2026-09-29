@@ -42,8 +42,19 @@ body {
   image-rendering: auto;
 }
 
-/* 气泡：宠物上方，默认隐藏。 */
+/* 气泡：宠物上方，默认隐藏。
+ *
+ * 配色全部走 CSS 变量，**不要在任何一条规则里单独写 background 或 color**。
+ * 踩过的坑：实时层当初只覆盖了 background，漏了 color —— 深色模式下
+ * `#bubble[data-live='1']` 优先级更高，于是背景被换成浅色、字色还留着浅色，
+ * 变成浅底浅字完全看不清；小尾巴 `::after` 也没跟着变。
+ * 用变量成套定义之后，前景/背景/尾巴不可能再各自漂移。 */
 #bubble {
+  --bubble-bg: #f6f9ff;
+  --bubble-fg: #23314f;
+  --bubble-shadow: 0 6px 18px #0b152833;
+  --bubble-ring: transparent;
+
   position: absolute;
   left: 50%;
   translate: -50% 0;
@@ -51,24 +62,25 @@ body {
   max-width: calc(100% - 12px);
   padding: 7px 12px 8px;
   border-radius: 14px;
-  background: #f6f9ff;
-  color: #23314f;
+  background: var(--bubble-bg);
+  color: var(--bubble-fg);
   font: 500 12.5px/1.45 -apple-system, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: 0 6px 18px #0b152833;
+  box-shadow: var(--bubble-shadow), inset 0 0 0 1px var(--bubble-ring);
   opacity: 0;
   transition: opacity 0.18s ease, translate 0.18s ease;
   pointer-events: none;
 }
 
 /* 实时层（真实的推理进度）与碎碎念层做个轻微区分：信息层更「实」一点，
-   但不要抢眼到变成通知条。 */
+   但不要抢眼到变成通知条。只换变量，不碰具体属性。 */
 #bubble[data-live='1'] {
-  background: #eaf2ff;
-  box-shadow: 0 6px 20px #0b152840, inset 0 0 0 1px #c3d6f580;
+  --bubble-bg: #eaf2ff;
+  --bubble-ring: #c3d6f580;
+  --bubble-shadow: 0 6px 20px #0b152840;
 }
 
 #bubble[data-visible='1'] {
@@ -86,18 +98,22 @@ body {
   height: 9px;
   translate: -50% 0;
   border-radius: 50%;
-  background: #f6f9ff;
+  background: var(--bubble-bg);
 }
 
 @media (prefers-color-scheme: dark) {
   #bubble {
-    background: #2b3242;
-    color: #e8eefc;
-    box-shadow: 0 6px 20px #00000055;
+    --bubble-bg: #2b3242;
+    --bubble-fg: #e8eefc;
+    --bubble-shadow: 0 6px 20px #00000055;
   }
 
-  #bubble::after {
-    background: #2b3242;
+  /* 深色下实时层要更亮一点才读得出「更实」，但必须与字色成套给。 */
+  #bubble[data-live='1'] {
+    --bubble-bg: #333d55;
+    --bubble-fg: #f0f5ff;
+    --bubble-ring: #55658a80;
+    --bubble-shadow: 0 6px 20px #00000066;
   }
 }
 

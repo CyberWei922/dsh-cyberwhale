@@ -188,6 +188,23 @@ token 流** —— 又长又碎还夹着大量内心独白，直接显示会既�
 **为什么需要「节流」**：推理流来得比人眼能读的快得多。相关逻辑照搬 Codex，
 详见 [lib/bubble.js](lib/bubble.js) 顶部注释（含两处有意与 Codex 不同的地方）。
 
+### 配色的注意事项
+
+气泡的前景/背景/尾巴**全部走 CSS 变量**，不要在规则里单独写 `background` 或 `color`：
+
+```css
+#bubble            { --bubble-bg: …; --bubble-fg: …; }
+#bubble[data-live='1'] { --bubble-bg: …; }          /* 只换变量 */
+@media (prefers-color-scheme: dark) { #bubble { … } }
+```
+
+**踩过的坑**：实时层当初只覆盖了 `background` 没覆盖 `color`，而
+`#bubble[data-live='1']` 的优先级高于 `#bubble` —— 于是深色模式下背景被换成浅色、
+字色仍留着深色模式的浅色，**浅底浅字完全看不清**，小尾巴也没跟着变。
+
+[真机验证脚本](#)里有 WCAG 对比度检查，深浅两种外观 × 实时/碎碎念两层共 6 项，
+正文阈值 4.5。带 bug 时深色模式量到的是 **1.16**。
+
 ---
 
 ## 工作原理

@@ -15,7 +15,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { app, BrowserWindow, Menu, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, screen } = require('electron');
 
 // ── 进程外观：不进 Dock、不进 Cmd+Tab ──────────────────────────────────────
 // 这两步是整个方案里唯一能解决「Electron 进程会在 Dock 留图标」的地方。
@@ -380,6 +380,15 @@ function dispatch(message) {
     case 'reload':
       win.webContents.send('pet:reload');
       break;
+    case 'theme': {
+      // 调试用：强制深/浅色外观，用来验证两种配色下气泡都读得清。
+      // 只接受固定取值，避免从上游塞进任意字符串。
+      const value = message.value;
+      if (value === 'dark' || value === 'light' || value === 'system') {
+        nativeTheme.themeSource = value;
+      }
+      break;
+    }
     case 'capture': {
       // 调试用：把窗口内容截一张 PNG 出来。
       // 外部 screencapture 需要屏幕录制权限，这条路不需要，而且抓到的正是

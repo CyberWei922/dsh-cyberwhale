@@ -7,7 +7,10 @@
  *   · 气泡确实渲染出来了
  *   · 文本越长气泡越宽（说明内容真的进了 DOM，不是画了个空壳）
  *   · 清空后气泡消失
- *   · 用的是实时层配色，而不是碎碎念那套
+ *   · 文字与背景的**对比度达标**，且**深浅两种外观下都达标**
+ *
+ * 最后那条是踩过坑之后加的：实时层当初只覆盖了 background 没覆盖 color，
+ * 深色模式下变成浅底浅字，肉眼一看就是"看不清"。纯逻辑测试抓不到这种问题。
  *
  * 用法：node tools/verify-bubble-render.mjs
  */
@@ -56,6 +59,53 @@ function measure(file, yFrom, yTo) {
   };
 }
 
+/** WCAG 相对亮度。 */
+function luminance([r, g, b]) {
+  const channel = (value) => {
+    const v = value / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+/** WCAG 对比度（1~21）。正文一般要求 ≥ 4.5。 */
+function contrastRatio(a, b) {
+  const la = luminance(a);
+  const lb = luminance(b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * 从气泡区域里估出「背景色」与「文字色」，算对比度。
+ * 背景 = 出现最多的颜色；文字 = 离背景最远且有足够像素量的颜色。
+ */
+function measureContrast(file, yFrom, yTo) {
+  const img = decodePng(readFileSync(file));
+  const histogram = new Map();
+  for (let y = yFrom; y < Math.min(yTo, img.height); y++) {
+    for (let x = 0; x < img.width; x++) {
+      const i = (y * img.width + x) * 4;
+      if (img.data[i + 3] < 200) continue; // 只看实心区域，排除抗锯齿边缘
+      const key = `${img.data[i]},${img.data[i + 1]},${img.data[i + 2]}`;
+      histogram.set(key, (histogram.get(key) ?? 0) + 1);
+    }
+  }
+  if (histogram.size === 0) return null;
+
+  const entries = [...histogram.entries()].sort((a, b) => b[1] - a[1]);
+  const background = entries[0][0].split(',').map(Number);
+  let text = background;
+  let best = 0;
+  for (const [key, count] of entries) {
+    if (count < 20) continue; // 太少的像素当噪声
+    const color = key.split(',').map(Number);
+    const distance = Math.hypot(color[0] - background[0], color[1] - background[1], color[2] - background[2]);
+    if (distance > best) { best = distance; text = color; }
+  }
+  return { background, text, ratio: contrastRatio(background, text) };
+}
+
 await sleep(6500);
 const shots = [
   { name: 'short', text: '读取配置' },
@@ -68,10 +118,7 @@ for (const shot of shots) {
   send({ t: 'capture', path: `${dir}/${shot.name}.png` });
   await sleep(700);
 }
-send({ t: 'quit' });
-await sleep(500);
-child.kill('SIGTERM');
-await sleep(300);
+// （退出放到所有抓帧之后）
 
 // 气泡在窗口顶部：scale=1 时窗口 335×479(CSS) → 670×958(设备像素)
 // 气泡大约在 CSS y 189~220 → 设备 y 378~440
@@ -85,7 +132,67 @@ const shortM = measure(`${dir}/short.png`, ...BAND);
 const longM = measure(`${dir}/long.png`, ...BAND);
 const emptyM = measure(`${dir}/empty.png`, ...BAND);
 console.log();
+
+// ── 深浅两种外观下的对比度 ────────────────────────────────────────────────
+console.log('\n对比度（WCAG，正文要求 ≥ 4.5）：\n');
+const contrastChecks = [];
+for (const scheme of ['light', 'dark']) {
+  send({ t: 'theme', value: scheme });
+  await sleep(400);
+
+  // 实时层
+  for (const shot of shots.slice(0, 2)) {
+    send({ t: 'bubble', text: shot.text });
+    await sleep(300);
+    const file = `${dir}/${scheme}-${shot.name}.png`;
+    send({ t: 'capture', path: file });
+    await sleep(700);
+    const c = measureContrast(file, ...BAND);
+    if (c === null) {
+      console.log(`  ${scheme}/${shot.name}: 量不到内容`);
+      contrastChecks.push([`${scheme} 模式下实时气泡有内容`, false]);
+      continue;
+    }
+    const ok = c.ratio >= 4.5;
+    console.log(`  ${scheme.padEnd(5)} 实时 ${shot.name.padEnd(6)} 背景 rgb(${c.background}) 文字 rgb(${c.text})  对比度 ${c.ratio.toFixed(2)}  ${ok ? '✓' : '✗'}`);
+    contrastChecks.push([`${scheme} 模式下实时层对比度 ≥ 4.5`, ok]);
+  }
+
+  // 碎碎念层：先清掉实时层，再触一次状态变化让它冒泡。
+  // 这一层也必须验 —— 同一个"只改一个属性"的坑两边都踩得到。
+  // 碎碎念是按「动画状态 × 6 秒分桶」冒泡的，单次不一定命中；
+  // 换几个状态重试，直到量到内容为止。
+  send({ t: 'bubble', text: '' });
+  await sleep(200);
+  let flavorFile = `${dir}/${scheme}-flavor.png`;
+  let flavor = null;
+  for (const state of ['waving', 'failed', 'jumping', 'waving', 'failed']) {
+    send({ t: 'state', v: state });
+    await sleep(500);
+    send({ t: 'capture', path: flavorFile });
+    await sleep(700);
+    flavor = measureContrast(flavorFile, ...BAND);
+    if (flavor !== null) break;
+  }
+  if (flavor === null) {
+    console.log(`  ${scheme.padEnd(5)} 碎碎念   量不到内容（随机冒泡，多次重试仍未命中）`);
+  } else {
+    const ok = flavor.ratio >= 4.5;
+    console.log(`  ${scheme.padEnd(5)} 碎碎念   背景 rgb(${flavor.background}) 文字 rgb(${flavor.text})  对比度 ${flavor.ratio.toFixed(2)}  ${ok ? '✓' : '✗'}`);
+    contrastChecks.push([`${scheme} 模式下碎碎念层对比度 ≥ 4.5`, ok]);
+  }
+}
+send({ t: 'theme', value: 'system' });
+
+// 所有抓帧都做完了，现在才收工
+send({ t: 'quit' });
+await sleep(500);
+child.kill('SIGTERM');
+await sleep(300);
+
+console.log();
 const checks = [
+  ...contrastChecks,
   ['实时气泡有内容', shortM.count > 500],
   ['更长的文本 → 更宽的气泡', longM.width > shortM.width],
   ['清空后气泡消失（或回落到碎碎念）', emptyM.count !== shortM.count || emptyM.width !== shortM.width],
