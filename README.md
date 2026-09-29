@@ -2,7 +2,7 @@
 
 一只常驻 macOS 桌面、随 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 工作状态变化的蓝色大肥鲸桌宠。
 
-> 仓库：<https://github.com/wei/dsh-deskpet>
+> 仓库：<https://github.com/CyberWei922/dsh-deskpet>
 > 本项目早期叫 `dsh-pet-whale`，已按仓库名统一改为 **`dsh-deskpet`**。
 > 从旧版本升级请看下面的[升级说明](#从旧名字升级)。
 
