@@ -356,6 +356,12 @@ ipcMain.on('pet:moved-by-user', () => reportPosition());
 function dispatch(message) {
   if (win === null || win.isDestroyed()) return;
   switch (message.t) {
+    case 'bubble':
+      // 实时气泡内容由宿主提炼+节流后下发，这里只做转发。
+      if (win !== null && !win.isDestroyed()) {
+        win.webContents.send('pet:bubble', typeof message.text === 'string' ? message.text : '');
+      }
+      break;
     case 'state':
       win.webContents.send('pet:state', message.v);
       break;

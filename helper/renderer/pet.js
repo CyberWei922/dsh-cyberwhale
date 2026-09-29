@@ -95,6 +95,10 @@ const state = {
   visualScale: host?.config?.scale ?? 1,
   bubbleKey: null,
   bubbleUntil: 0,
+  /** 宿主提炼好的实时进度句；空串表示没有，回落到碎碎念。 */
+  liveText: '',
+  /** 实时句的保留截止时间。上游不再更新时靠它回落。 */
+  liveUntil: 0,
 };
 
 // ── 素材加载 ───────────────────────────────────────────────────────────────
@@ -303,36 +307,68 @@ function draw(now) {
 }
 
 // ── 气泡 ──────────────────────────────────────────────────────────────────
+/** 实时进度句的保留时长：上游停更这么久之后回落到碎碎念。 */
+const LIVE_HOLD_MS = 12000;
+
+/** 只在内容真的变了时才写 DOM —— 这个函数每帧都会跑。 */
+function setBubbleText(text) {
+  if (bubble.textContent === text) return;
+  bubble.textContent = text;
+}
+
+function hideBubble() {
+  if (bubble.dataset.visible !== '0') bubble.dataset.visible = '0';
+}
+
+/**
+ * 气泡分两层：
+ *   1. **实时层** —— 宿主从推理流里提炼的进度句（压过碎碎念）
+ *   2. **碎碎念层** —— 原有的固定短语池，空闲/回落时用
+ */
 function updateBubble(now) {
   if (!state.bubbles) {
-    bubble.dataset.visible = '0';
+    hideBubble();
     return;
   }
 
+  // ── 实时层 ────────────────────────────────────────────────────────────
+  if (state.liveText !== '' && now < state.liveUntil) {
+    setBubbleText(state.liveText);
+    bubble.dataset.live = '1';
+    bubble.dataset.visible = '1';
+    return;
+  }
+  if (state.liveText !== '') {
+    // 上游不再更新了，回落
+    state.liveText = '';
+    bubble.dataset.live = '0';
+  }
+
+  // ── 碎碎念层 ──────────────────────────────────────────────────────────
   const transient = state.animation === 'jumping' || state.animation === 'failed' || state.animation === 'waving';
   const key = `${state.animation}:${Math.floor(now / 6000)}`;
 
-  if (transient && performance.now() < state.bubbleUntil) {
+  if (transient && now < state.bubbleUntil) {
     bubble.dataset.visible = '1';
     return;
   }
   if (!transient && state.bubbleKey === key) {
-    bubble.dataset.visible = '0';
+    hideBubble();
     return;
   }
   if (!transient && state.bubbleKey !== key && state.bubbleUntil === 0) {
     // 基态只在切换时冒一次泡，不常驻。
     const pool = BUBBLES[state.animation];
-    if (Array.isArray(pool) && pool.length > 0 && state.bubbleKey !== key) {
-      bubble.textContent = pool[Math.floor(Math.random() * pool.length)];
+    if (Array.isArray(pool) && pool.length > 0) {
+      setBubbleText(pool[Math.floor(Math.random() * pool.length)]);
       state.bubbleKey = key;
-      state.bubbleUntil = performance.now() + 2600;
+      state.bubbleUntil = now + 2600;
       bubble.dataset.visible = '1';
       return;
     }
   }
 
-  bubble.dataset.visible = '0';
+  hideBubble();
 }
 
 /** 进入瞬态状态时立刻冒泡。 */
@@ -432,10 +468,24 @@ host.onState((animation) => {
   announceTransient(animation);
 });
 
+host.onBubble((text) => {
+  const value = typeof text === 'string' ? text.trim() : '';
+  state.liveText = value;
+  // 留一点余量：上游按最小 3 秒的节奏推，停更 12 秒才回落成碎碎念。
+  state.liveUntil = value === '' ? 0 : performance.now() + LIVE_HOLD_MS;
+  if (value === '') bubble.dataset.live = '0';
+});
+
 host.onConfig((config) => {
   if (config === null || typeof config !== 'object') return;
   if (typeof config.lookAtCursor === 'boolean') state.lookAtCursor = config.lookAtCursor;
-  if (typeof config.bubbles === 'boolean') state.bubbles = config.bubbles;
+  if (typeof config.bubbles === 'boolean') {
+    state.bubbles = config.bubbles;
+    if (!config.bubbles) {
+      state.liveText = '';
+      state.liveUntil = 0;
+    }
+  }
   // 缩放只改目标值；视觉缩放由主循环缓动过去，所以看起来是平滑长大/缩小。
   if (Number.isFinite(Number(config.scale))) state.targetScale = Number(config.scale);
 });

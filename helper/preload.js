@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('petHost', {
   /** 订阅光标在窗口坐标系里的位置（主进程用全局光标算，窗口外也能追踪）。 */
   onCursor: (listener) => ipcRenderer.on('pet:cursor', (_event, value) => listener(value)),
 
+  /** 订阅宿主提炼好的气泡内容；空字符串表示清空，回到碎碎念。 */
+  onBubble: (listener) => ipcRenderer.on('pet:bubble', (_event, value) => listener(value)),
+
   /** 上报渲染层错误：否则渲染进程一挂，窗口就是一片空白且毫无提示。 */
   reportError: (message) => ipcRenderer.send('pet:renderer-error', String(message)),
 });

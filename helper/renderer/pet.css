@@ -64,6 +64,13 @@ body {
   pointer-events: none;
 }
 
+/* 实时层（真实的推理进度）与碎碎念层做个轻微区分：信息层更「实」一点，
+   但不要抢眼到变成通知条。 */
+#bubble[data-live='1'] {
+  background: #eaf2ff;
+  box-shadow: 0 6px 20px #0b152840, inset 0 0 0 1px #c3d6f580;
+}
+
 #bubble[data-visible='1'] {
   opacity: 1;
   translate: -50% -4px;
