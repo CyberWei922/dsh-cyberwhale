@@ -256,6 +256,7 @@ node tools/test-host.mjs                # 宿主半的离线集成测试
 node tools/test-client.mjs              # 设置页的测试
 node tools/test-atlas.mjs               # 图集拼装的测试
 node tools/ensure-electron.mjs          # 准备 Electron 运行时
+node tools/check-consistency.mjs        # 检查各帧画得有多不一致（见下）
 node tools/make-placeholder-atlas.mjs   # 生成纯几何占位图集（无素材时用）
 
 npm test                                # 上面三个测试一次跑完
@@ -275,6 +276,24 @@ node tools/assemble-atlas.mjs <帧目录> --key FF00FF   # 源图是实色底时
 
 规格见 [图集规格](docs/pet-asset-spec.md) 第 2 节（角色尺寸与安全区）
 与第 7 节（生产工具）；给绘图端的任务书是 [逐格动作与视线表](docs/pet-sprite-task-brief.md)。
+
+### 帧间一致性检查
+
+动画看着不舒服，往往**不是位置没对齐，而是每一帧的角色细节都不一样**
+（裙摆褶皱数量、刘海走向、表情结构…）。这种差异肉眼看得见但很难争论，所以做成数字：
+
+```bash
+node tools/check-consistency.mjs individual-draft
+node tools/check-consistency.mjs individual-draft --json   # 机器可读
+```
+
+做法是先把同行各帧按互相关对齐（否则量到的是位置漂移而不是画得不一致），
+再逐像素取中位数当「共识图」，最后量每帧与共识图的平均色差（0~255）。
+
+`jumping` 这类**姿态本来就该大幅变化**的动作会被豁免绝对阈值，
+只检查「有没有哪一帧特别离群」。
+
+返工方法与逐帧清单见 [形象一致性返工清单](docs/pet-consistency-rework-brief.md)。
 
 ### 抓窗口截图（验证渲染问题很有用）
 
