@@ -153,6 +153,16 @@ export const DEFAULT_OPTIONS = {
   allowUpscale: false,
   strict: false,
   dryRun: false,
+  /**
+   * 帧间水平对齐：'off' | 'row'
+   *
+   * 生成端是按「整体外接框」对齐的，尾巴一摆身体就会被推着走 —— 肉眼看就是
+   * 播放时整个人在左右漂。'row' 会用**互相关**算出每帧相对同行基准帧的位移，
+   * 摆放时补偿掉。这是唯一不依赖"语义锚点"的做法：不用猜哪里是身体、哪里是尾巴。
+   */
+  align: 'off',
+  /** 位移小于这个值就不动它，免得把本来就对齐好的行也搅一遍。 */
+  alignThreshold: 3,
 };
 
 export function parseArguments(argv) {
@@ -183,6 +193,11 @@ export function parseArguments(argv) {
     }
     else if (arg === '--key') options.key = next();
     else if (arg === '--tolerance') options.tolerance = Number(next());
+    else if (arg === '--align') {
+      const value = next();
+      if (!['off', 'row'].includes(value)) throw new Error('--align 只能是 off / row');
+      options.align = value;
+    } else if (arg === '--align-threshold') options.alignThreshold = Number(next());
     else if (arg === '--allow-upscale') options.allowUpscale = true;
     else if (arg === '--strict') options.strict = true;
     else if (arg === '--dry-run') options.dryRun = true;
@@ -267,6 +282,74 @@ export async function discoverFrames(framesDir) {
     list.sort((a, b) => frameIndex(a) - frameIndex(b) || a.localeCompare(b));
   }
   return { rows, unknown };
+}
+
+// ── 帧间对齐 ──────────────────────────────────────────────────────────────
+/**
+ * 把一帧降采样成 alpha 掩膜，用于互相关。
+ * 降采样既省时间，也天然忽略掉抗锯齿边缘的噪声。
+ */
+function alphaMask(image, step = 3) {
+  const width = Math.ceil(image.width / step);
+  const height = Math.ceil(image.height / step);
+  const data = new Float32Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      data[y * width + x] = image.data[((y * step) * image.width + x * step) * 4 + 3] / 255;
+    }
+  }
+  return { data, width, height };
+}
+
+/** 在 ±maxShift（掩膜像素）内找让 current 最贴合 reference 的水平位移。 */
+function bestHorizontalShift(reference, current, maxShift) {
+  let best = 0;
+  let bestScore = Infinity;
+  for (let dx = -maxShift; dx <= maxShift; dx += 1) {
+    let score = 0;
+    let counted = 0;
+    for (let y = 0; y < reference.height; y += 1) {
+      for (let x = 0; x < reference.width; x += 1) {
+        const target = x + dx;
+        if (target < 0 || target >= reference.width) continue;
+        score += Math.abs(reference.data[y * reference.width + x] - current.data[y * current.width + target]);
+        counted += 1;
+      }
+    }
+    if (counted === 0) continue;
+    const average = score / counted;
+    if (average < bestScore) {
+      bestScore = average;
+      best = dx;
+    }
+  }
+  return best;
+}
+
+/**
+ * 逐行算出每帧相对基准帧的水平位移（源图像素）。
+ *
+ * 基准帧取该行的**中间帧**；算完再把整行位移整体居中，
+ * 免得所有帧被一起推偏。
+ *
+ * @returns {Map<string, number>} 帧文件 → 位移
+ */
+export function estimateRowShifts(rowFrames, { step = 3, maxShift = 45 } = {}) {
+  const masks = rowFrames.map((frame) => alphaMask(frame.image, step));
+  const referenceIndex = Math.floor(rowFrames.length / 2);
+  // 注意符号：bestHorizontalShift 返回的是「当前帧相对基准帧向右偏了多少」，
+  // 要**反向**补偿才能把它拉回来。这里踩过坑 —— 直接加同方向等于把偏移放大一倍。
+  const raw = masks.map((mask, index) =>
+    index === referenceIndex
+      ? 0
+      : -bestHorizontalShift(masks[referenceIndex], mask, Math.round(maxShift / step)) * step,
+  );
+  // 整体居中：位移的中位数挪到 0，避免整行被推偏
+  const sorted = [...raw].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const shifts = new Map();
+  rowFrames.forEach((frame, index) => shifts.set(frame.file, raw[index] - median));
+  return shifts;
 }
 
 // ── 抠色 ──────────────────────────────────────────────────────────────────
@@ -406,11 +489,52 @@ export async function assemble(options) {
         // 尾巴/鳍/道具伸出来时，按包围盒居中会把身体推离中轴，看起来就是横向漂移。
         canvasWidth: image.width,
         bboxLeft: bounds.left,
+        // 只给帧间对齐用：算互相关需要整张画布（含尾巴等摆动部分）
+        image,
+        /** 帧间水平补偿（源图像素），--align row 时才算 */
+        alignShift: 0,
       });
     }
   }
 
   if (frames.length === 0) throw new Error('所有帧都是空的，检查一下图片是不是真的没有内容');
+
+  // 帧间水平对齐（可选）：用互相关算每帧相对同行基准帧的位移。
+  const alignReport = [];
+  if (options.align === 'row') {
+    for (const spec of ROW_SPECS) {
+      const rowFrames = frames.filter((frame) => frame.row === spec.row);
+      if (rowFrames.length < 2) continue;
+      const shifts = estimateRowShifts(rowFrames);
+      let touched = 0;
+      let worst = 0;
+      for (const frame of rowFrames) {
+        const shift = shifts.get(frame.file) ?? 0;
+        worst = Math.max(worst, Math.abs(shift));
+        if (Math.abs(shift) < options.alignThreshold) continue; // 本来就对齐的别动
+        frame.alignShift = shift;
+        touched += 1;
+      }
+      alignReport.push({ name: spec.name, worst, touched, total: rowFrames.length });
+    }
+  }
+
+  // 应用了对齐的行，还要整体回正：
+  // 互相关只保证帧与帧之间一致，整行仍可能整体偏离中轴
+  // （生成端按外接框对齐，而尾巴会让外接框中心与身体中轴不一致）。
+  // 这里按「该行内容中轴的中位数」把整行拉回格子中轴。
+  const rowCenterFix = new Map();
+  if (options.align === 'row') {
+    for (const spec of ROW_SPECS) {
+      const rowFrames = frames.filter((frame) => frame.row === spec.row);
+      if (rowFrames.length === 0) continue;
+      const centers = rowFrames
+        .map((frame) => frame.bboxLeft + frame.contentWidth / 2 + frame.alignShift)
+        .sort((a, b) => a - b);
+      const median = centers[Math.floor(centers.length / 2)];
+      rowCenterFix.set(spec.row, median);
+    }
+  }
 
   // 画布锚定的行：算出该行内容的**实际活动范围**（所有帧的并集）。
   // 按整张画布算会浪费很多尺寸 —— 比如 jumping 的 512×560 画布里，
@@ -454,7 +578,47 @@ export async function assemble(options) {
   }
 
   // ③ 合成：底边居中
+  //
+  // 注意：这个数组必须在摆放循环**之前**声明。它是 const，有 TDZ ——
+  // 写在循环后面会让整个流程崩在 `Cannot access 'clampReport' before initialization`。
+  // 同样的坑在 geometry.js 那次也踩过。
+  /** 被边界夹紧挪动过的帧（挪了说明"内容宽度 + 居中"放不下，只能牺牲居中）。 */
+  const clampReport = [];
+
   const atlas = createCanvas(CELL_WIDTH * COLUMNS, CELL_HEIGHT * ROWS);
+
+  /** 某帧在格内的水平位置（未夹紧）。 */
+  function placementX(frame, column) {
+    const cellLeft = column * CELL_WIDTH;
+    const sourceLeft = frame.mode === 'canvas' ? 0 : frame.bboxLeft;
+    const rowFix = rowCenterFix.has(frame.row) ? 256 - rowCenterFix.get(frame.row) : 0;
+    return cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - sourceLeft) * scale
+      + ((frame.alignShift ?? 0) + rowFix) * scale;
+  }
+
+  /**
+   * 整行统一的夹紧偏移。
+   *
+   * 关键是**整行一起挪**：如果只挪放不下的那几帧，帧与帧之间又会产生新的相对位移 ——
+   * 那正是我们花力气用对齐消除掉的漂移。（实测只挪个别帧会留下 6.5px 漂移。）
+   */
+  const EDGE_MARGIN = 4;
+  const rowClampShift = new Map();
+  for (const spec of ROW_SPECS) {
+    const rowFrames = frames.filter((frame) => frame.row === spec.row);
+    let needRight = 0; // 需要向左挪的量
+    let needLeft = 0;  // 需要向右挪的量
+    rowFrames.forEach((frame, column) => {
+      const x = placementX(frame, column);
+      const contentLeft = frame.mode === 'canvas' ? x + frame.bboxLeft * scale : x;
+      const span = (frame.mode === 'canvas' ? frame.contentWidth : frame.placement.width) * scale;
+      const leftLimit = column * CELL_WIDTH + EDGE_MARGIN;
+      const rightLimit = (column + 1) * CELL_WIDTH - EDGE_MARGIN;
+      needLeft = Math.max(needLeft, leftLimit - contentLeft);
+      needRight = Math.max(needRight, contentLeft + span - rightLimit);
+    });
+    rowClampShift.set(spec.row, needLeft - needRight);
+  }
 
   for (const spec of ROW_SPECS) {
     frames
@@ -462,18 +626,9 @@ export async function assemble(options) {
       .forEach((frame, column) => {
         const width = frame.placement.width * scale;
         const height = frame.placement.height * scale;
-        const cellLeft = column * CELL_WIDTH;
-        // 水平：让「源画布中轴」落在格子中轴上。
-        // 这样多出来的尾巴/鳍不会把身体推偏 —— 换成包围盒中轴就会。
-        //
-        // 起点要按摆放对象区分：
-        //   · bottom 模式摆放的是**裁剪后**的图，左边缘在源图 x = bboxLeft 处
-        //   · canvas 模式摆放的是**整张画布**，左边缘就是源图 x = 0
-        // 踩过的坑：两种模式共用 `- (canvasWidth/2 - bboxLeft)*scale`，
-        // 于是 canvas 模式的 bboxLeft 被算了两遍，整行往右偏出格子 ——
-        // 表现是 jumping 内容跑到隔壁列，连垂直的腾空测试都被带崩。
-        const sourceLeft = frame.mode === 'canvas' ? 0 : frame.bboxLeft;
-        const x = cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - sourceLeft) * scale;
+        // 水平位置：见 placementX()。它按「源画布中轴落在格子中轴」算，
+        // 再叠加帧间对齐补偿与整行回正，最后加上整行统一的夹紧偏移。
+        const x = placementX(frame, column) + (rowClampShift.get(spec.row) ?? 0);
         // 垂直：摆放对象的底边距格子底部恰好 margin 像素
         let y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - height;
         if (frame.mode === 'canvas') {
@@ -487,6 +642,14 @@ export async function assemble(options) {
           const cellTop = spec.row * CELL_HEIGHT;
           if (contentTopOnScreen < cellTop) y += cellTop - contentTopOnScreen;
         }
+        if (Math.abs(rowClampShift.get(spec.row) ?? 0) >= 1) {
+          clampReport.push({
+            row: spec.name,
+            file: frame.file,
+            moved: rowClampShift.get(spec.row),
+          });
+        }
+
         drawScaled(frame.placement, atlas, Math.round(x), Math.round(y), scale);
       });
   }
@@ -522,8 +685,8 @@ export async function assemble(options) {
 
       const centerOffset = Math.abs((minX + maxX) / 2 - (CELL_WIDTH - 1) / 2);
       const epsilon = 6; // 抗锯齿与取整的余量
-      if (minX < epsilon || maxX > CELL_WIDTH - 1 - epsilon) {
-        geometryIssues.push(`${frame.file}：合成后内容贴到格子左右边缘（x∈[${minX},${maxX}]），可能被邻格裁切`);
+      if (minX < 3 || maxX > CELL_WIDTH - 4) {
+        geometryIssues.push(`${frame.file}：合成后内容真的贴到格子边缘（x∈[${minX},${maxX}]），会被邻格裁切`);
       }
       if (minY < epsilon) {
         geometryIssues.push(`${frame.file}：合成后内容贴到格子顶边（y=${minY}），会被上一行裁切`);
@@ -578,6 +741,8 @@ export async function assemble(options) {
       complete: rowCounts.every((row) => row.count === row.expected),
       hasProblems: problems.length > 0 || geometryIssues.length > 0,
       geometryIssues,
+      alignReport,
+      clampReport,
     },
   };
 }
@@ -623,6 +788,24 @@ export function formatReport(report, { dryRun }) {
     }
     if (report.scale === 1 && min > 1) {
       lines.push(`  ·  图片本身小于安全区。加 --allow-upscale 可放大到 ${min.toFixed(2)}×（会有重采样损失）。`);
+    }
+  }
+
+  if (report.alignReport !== undefined && report.alignReport.length > 0) {
+    lines.push('', '帧间对齐（互相关）：');
+    for (const row of report.alignReport) {
+      lines.push(
+        `  ${row.name.padEnd(14)} 最大位移 ${String(row.worst).padStart(3)}px   调整了 ${row.touched}/${row.total} 帧`,
+      );
+    }
+  }
+
+  if (report.clampReport !== undefined && report.clampReport.length > 0) {
+    const rows = [...new Set(report.clampReport.map((item) => item.row))];
+    lines.push('', `边界夹紧（整行统一平移，避免重新引入帧间漂移）：`);
+    for (const name of rows) {
+      const item = report.clampReport.find((entry) => entry.row === name);
+      lines.push(`     ${name}：整行平移 ${item.moved.toFixed(0)}px（内容比格子能容纳的更宽）`);
     }
   }
 
