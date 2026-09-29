@@ -400,6 +400,10 @@ export async function assemble(options) {
         placement: useCanvas ? image : cropped,
         // 角色在源画布里的最低点，用来推算该行自己的地面线
         contentBottom: bounds.bottom,
+        // 水平对齐用「源画布中轴」，不用「包围盒中轴」：
+        // 尾巴/鳍/道具伸出来时，按包围盒居中会把身体推离中轴，看起来就是横向漂移。
+        canvasWidth: image.width,
+        bboxLeft: bounds.left,
       });
     }
   }
@@ -435,8 +439,11 @@ export async function assemble(options) {
       .forEach((frame, column) => {
         const width = frame.placement.width * scale;
         const height = frame.placement.height * scale;
-        const x = column * CELL_WIDTH + (CELL_WIDTH - width) / 2;
-        // 底边对齐：摆放对象的底边距格子底部恰好 margin 像素
+        const cellLeft = column * CELL_WIDTH;
+        // 水平：让「源画布中轴」落在格子中轴上。
+        // 这样多出来的尾巴/鳍不会把身体推偏 —— 换成包围盒中轴就会。
+        const x = cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - frame.bboxLeft) * scale;
+        // 垂直：摆放对象的底边距格子底部恰好 margin 像素
         let y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - height;
         if (frame.mode === 'canvas') {
           // 画布模式：让该行的地面线落在格子地面线上，而不是让画布底边贴底。

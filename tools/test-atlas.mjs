@@ -265,6 +265,43 @@ try {
     check('每格内容都不越界', insideOk, true);
   }
 
+  // ── 横向漂移：身体不能随尾巴/鳍摆动而偏移 ────────────────────────────
+  console.log('\n[6b] 横向漂移');
+  {
+    const dir = join(workspace, 'horizontal-drift');
+    // 身体中轴固定在源画布 x=256，脚底固定在 y=544；尾巴逐帧伸出不同长度。
+    // 按「包围盒中轴」对齐的话，尾巴一伸身体就会被推走。
+    const tails = [0, 200, 0, 120];
+    for (let i = 0; i < tails.length; i += 1) {
+      const canvas = createCanvas(512, 560);
+      if (tails[i] > 0) ellipse(canvas, 256 - 110 - tails[i] / 2, 420, tails[i] / 2, 40, [70, 120, 200]);
+      ellipse(canvas, 256, 430, 90, 114, [90, 150, 230]);
+      await save(join(dir, 'idle'), `${i}.png`, canvas);
+    }
+
+    const { atlas } = await assemble(parseArguments([dir]));
+
+    // 只量「尾巴下方」的行，避开尾巴本身
+    const bodyAxis = (column) => {
+      let minX = CELL_WIDTH;
+      let maxX = -1;
+      for (let y = 170; y < 200; y += 1) {
+        for (let x = 0; x < CELL_WIDTH; x += 1) {
+          if (atlas.data[(y * atlas.width + column * CELL_WIDTH + x) * 4 + 3] > 128) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+          }
+        }
+      }
+      return (minX + maxX) / 2;
+    };
+
+    const axes = tails.map((_, column) => bodyAxis(column));
+    const spread = Math.max(...axes) - Math.min(...axes);
+    check(`身体中轴不随尾巴摆动漂移（偏移 ${spread.toFixed(2)}px）`, spread <= 2, true);
+    check('身体中轴落在格子中轴上', Math.abs(axes[0] - (CELL_WIDTH - 1) / 2) <= 2, true);
+  }
+
   // ── 全局统一缩放 ──────────────────────────────────────────────────────
   console.log('\n[7] 全局统一缩放');
   {
