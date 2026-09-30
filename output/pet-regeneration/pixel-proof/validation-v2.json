@@ -1,0 +1,24 @@
+{
+  "canvas": [
+    512,
+    560
+  ],
+  "alpha_identical": true,
+  "changed_pixels_outside_face_mask": 0,
+  "source_alpha_bbox": [
+    82,
+    58,
+    428,
+    535
+  ],
+  "output_alpha_bbox": [
+    82,
+    58,
+    428,
+    535
+  ],
+  "height_px": 477,
+  "foot_y": 534,
+  "method": "AI face redraw, registered and composited inside original face mask; original mouth retained.",
+  "passed_pixel_invariants": true
+}

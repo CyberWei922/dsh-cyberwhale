@@ -397,7 +397,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
 
   check('正在写入的分段控件被禁用', segmentsOf(tree)[0].props.disabled, true);
   check('【关键】启用开关没有被一起禁用', byLabel(tree, '启用桌宠').props.disabled, false);
-  check('【关键】眼睛跟随开关没有被一起禁用', byLabel(tree, '眼睛跟随鼠标').props.disabled, false);
+  check('【关键】眼睛跟随开关没有被一起禁用', byLabel(tree, '看向鼠标').props.disabled, false);
   check('【关键】气泡开关没有被一起禁用', byLabel(tree, '气泡提示').props.disabled, false);
 
   // 请求完成 → 全部恢复

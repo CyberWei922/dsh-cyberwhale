@@ -63,7 +63,14 @@ const BUBBLES = {
   waving: ['嘿～', '你好呀'],
 };
 
-const LOOK_IDLE_MS = 1600; // 光标静止多久后放弃注视
+/**
+ * 指针停在身上多久之后自动停止注视（毫秒）。
+ *
+ * 对齐 Codex：它的计时器是 `setTimeout(cancel, 1e4)` —— 指针一进入宠物身上就开始计时，
+ * 10 秒后取消注视，回到正常的待机动画。指针不离开也不会重新开始，
+ * 要离开再进来才会再触发一轮。
+ */
+const LOOK_HOLD_MS = 10_000;
 const LOOK_ROWS = [9, 10];
 /** 每行注视方向的帧数。两行共 16 个方向，覆盖顺时针一整圈。 */
 const LOOK_FRAMES_PER_ROW = 8;
@@ -90,7 +97,10 @@ const state = {
   lookAtCursor: host?.config?.lookAtCursor !== false,
   bubbles: host?.config?.bubbles !== false,
   cursor: null,
-  cursorMovedAt: 0,
+  /** 指针此刻是否停在宠物身上（决定要不要注视）。 */
+  cursorOverPet: false,
+  /** 指针进入宠物身上的时刻；0 表示不在身上。用于 10 秒上限。 */
+  cursorEnteredAt: 0,
   /** 目标缩放（来自设置）。 */
   targetScale: host?.config?.scale ?? 1,
   /** 当前实际绘制的缩放，朝 targetScale 缓动。 */
@@ -339,17 +349,54 @@ function hitRect() {
 }
 
 // ── 绘制 ──────────────────────────────────────────────────────────────────
-function currentLookFrame() {
-  if (!state.lookAtCursor || state.dragging) return null;
-  if (state.cursor === null) return null;
-  if (performance.now() - state.cursorMovedAt > LOOK_IDLE_MS) return null;
+/**
+ * 当前该不该注视鼠标，该看哪个方向。返回 null 表示不注视。
+ *
+ * 规则完全对齐 Codex 的桌宠（`app-initial-*.js` 里那个组件）：
+ *
+ *   1. **只有待机时注视** —— 一旦进了干活中/抬头等你/低头检查/挥手/跳跃/出错，
+ *      眼睛就定住。原实现让注视无条件插队，结果打招呼都会被它顶掉。
+ *   2. **鼠标必须停在它身上** —— Codex 监听的是指针在宠物元素上的移动，
+ *      鼠标在屏幕别处晃它完全不理会。原实现是全屏跟随。
+ *   3. **最多看 10 秒** —— 从指针进入身上开始计时，到点自动回到待机动画。
+ *   4. **指针一移开立刻停**。
+ *
+ * 方向按「指针相对宠物中心的角度」算，22.5° 一档共 16 个方向（图集第 9、10 行），
+ * 这一点与 Codex 一致（它也是 22.5°/16 方向/第 9、10 行）。
+ *
+ * @param now - 当前时间（rAF 时间戳，与 performance.now() 同一时基）。
+ */
+function currentLookFrame(now) {
+  // 指针在不在身上：用和点击命中共用的那块矩形，透明边缘不算「身上」
+  const rect = hitRect();
+  const cursor = state.cursor;
+  const over =
+    cursor !== null &&
+    cursor.x >= rect.left &&
+    cursor.x <= rect.left + rect.width &&
+    cursor.y >= rect.top &&
+    cursor.y <= rect.top + rect.height;
 
-  const rect = petRect();
-  const centerX = rect.petLeft + rect.petWidth / 2;
-  const centerY = rect.petTop + rect.petHeight * 0.45;
-  const dx = state.cursor.x - centerX;
-  const dy = state.cursor.y - centerY;
-  if (Math.hypot(dx, dy) < 12) return null; // 死区：回落到普通动画
+  if (over !== state.cursorOverPet) {
+    state.cursorOverPet = over;
+    // 只在「刚进来」的那一次记时间 —— 不然一直待在上面会无限续期，
+    // Codex 的计时器也是这个语义。
+    state.cursorEnteredAt = over ? now : 0;
+  }
+
+  if (!state.lookAtCursor || state.dragging) return null;
+  if (state.animation !== 'idle') return null; // 规则 1：只有待机才注视
+  if (!over) return null;                      // 规则 2：鼠标必须在身上
+  if (now - state.cursorEnteredAt > LOOK_HOLD_MS) return null; // 规则 3：最多 10 秒
+
+  const pet = petRect();
+  const centerX = pet.petLeft + pet.petWidth / 2;
+  const centerY = pet.petTop + pet.petHeight * 0.45;
+  const dx = cursor.x - centerX;
+  const dy = cursor.y - centerY;
+  // 死区：正好停在身体中心时不妨硬选一个方向，落回待机动画更自然。
+  // （Codex 这里是 1px，几乎等于没有；我们放宽到 12px。）
+  if (Math.hypot(dx, dy) < 12) return null;
 
   // 0° = 正上，顺时针增长。
   const degrees = (Math.atan2(dx, -dy) * 180) / Math.PI;
@@ -362,7 +409,7 @@ function currentLookFrame() {
 }
 
 function currentAnimationFrame(now) {
-  const look = currentLookFrame();
+  const look = currentLookFrame(now);
   if (look !== null) return { row: look.row, col: look.col };
 
   const animation = ANIMATIONS[state.animation] ?? ANIMATIONS.idle;
@@ -533,7 +580,6 @@ function updateInteractivity(point) {
 // ── 事件 ──────────────────────────────────────────────────────────────────
 window.addEventListener('mousemove', (event) => {
   state.cursor = { x: event.clientX, y: event.clientY };
-  state.cursorMovedAt = performance.now();
   updateInteractivity(state.cursor);
 });
 
@@ -596,6 +642,12 @@ host.onProbe(() => {
     bubbleVisible: bubble.dataset.visible ?? null,
     pet: rectOf(canvas),
     window: { width: window.innerWidth, height: window.innerHeight },
+    // 注视相关的状态，真机验证靠它判断规则有没有生效
+    hitRect: hitRect(),
+    animation: state.animation,
+    lookAtCursor: state.lookAtCursor,
+    cursorOverPet: state.cursorOverPet,
+    looking: currentLookFrame(performance.now()) !== null,
   });
 });
 
@@ -646,9 +698,9 @@ host.onReload(() => {
 if (typeof host.onCursor === 'function') {
   host.onCursor((point) => {
     if (point === null || typeof point !== 'object') return;
-    const moved = state.cursor === null || Math.hypot(point.x - state.cursor.x, point.y - state.cursor.y) > 2;
+    // 只记位置，不再记「动了多久」—— 注视的开关是「指针在不在身上」，
+    // 由 currentLookFrame 每帧判定。
     state.cursor = point;
-    if (moved) state.cursorMovedAt = performance.now();
   });
 }
 

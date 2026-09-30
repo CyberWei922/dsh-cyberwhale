@@ -315,12 +315,24 @@ function endDrag() {
 // 屏幕任意位置的光标，而不只是看着窗口里那一小块。
 let cursorTimer = null;
 
+/**
+ * 调试用：把光标投喂锁在一个固定点上（窗口坐标）。null 表示用真实光标。
+ *
+ * 为什么需要它：真机验证「鼠标停在身上才注视」这个前提时，
+ * 靠真的去移动系统光标既不可靠又会把用户的鼠标拽走。
+ */
+let cursorOverride = null;
+
 function startCursorTracking() {
   if (cursorTimer !== null || !lookAtCursor) return;
   cursorTimer = setInterval(() => {
     if (win === null || win.isDestroyed()) return;
-    const cursor = screen.getCursorScreenPoint();
     const [wx, wy] = win.getPosition();
+    if (cursorOverride !== null) {
+      win.webContents.send('pet:cursor', cursorOverride);
+      return;
+    }
+    const cursor = screen.getCursorScreenPoint();
     win.webContents.send('pet:cursor', { x: cursor.x - wx, y: cursor.y - wy });
   }, 80);
   cursorTimer.unref?.();
@@ -436,6 +448,17 @@ function dispatch(message) {
       win.webContents.send('pet:probe');
       break;
     }
+    case 'probe-cursor':
+      // 调试用：注入指针位置（窗口坐标）。必须**持久覆盖**真实光标 ——
+      // 光标投喂每 80ms 一次，只发一次会被真实位置立刻盖掉，测试就永远测不到。
+      if (message.clear === true) cursorOverride = null;
+      else if (Number.isFinite(Number(message.x)) && Number.isFinite(Number(message.y))) {
+        cursorOverride = { x: Number(message.x), y: Number(message.y) };
+      }
+      if (win !== null && !win.isDestroyed() && cursorOverride !== null) {
+        win.webContents.send('pet:cursor', cursorOverride);
+      }
+      break;
     case 'capture': {
       // 调试用：把窗口内容截一张 PNG 出来。
       // 外部 screencapture 需要屏幕录制权限，这条路不需要，而且抓到的正是
