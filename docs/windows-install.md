@@ -12,31 +12,37 @@
 - Node.js ≥ 22（只用于准备运行时/跑测试；DSH 自己不需要你的 Node）。
 - 磁盘：Electron 运行时解包后约 350 MB。
 
-## 2. 安装插件（官方 CLI）
+## 2. 安装插件
+
+推荐直接在应用内装：侧栏 → **插件** → **添加插件**，粘仓库地址或 `.tgz` 直链，装完点**立即启用**。
+命令行方式（等价，排障或离线时用）：
 
 ```powershell
 # 1) 完全退出 DSH Desktop（从托盘退出）
 
 # 2) 用 Desktop 自带 CLI 装本地路径
 & "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" `
-    plugin --profile desktop add "D:\path\to\dsh-deskpet"
+    plugin --profile desktop add "D:\path\to\dsh-cyberwhale"
 ```
 
 成功时 CLI 会：
-- 在 `%USERPROFILE%\.dsh\profiles\desktop\package.json` 写入 `"dsh-deskpet": "link:D:/path/to/dsh-deskpet"`；
-- 把 `dsh-deskpet` 追加进 `dsh.profile.bundles`；
+- 在 `%USERPROFILE%\.dsh\profiles\desktop\package.json` 写入 `"dsh-cyberwhale": "link:D:/path/to/dsh-cyberwhale"`（依赖 key 是**包名**，本地目录叫什么不影响）；
+- 把 `dsh-cyberwhale` 追加进 `dsh.profile.bundles`；
 - 在 `profiles\desktop\node_modules\` 建一个指向仓库的 Junction。
 
 ## 3. 准备 Electron 运行时
 
+**优先在设置页点**：重启 DSH Desktop → **设置 → 桌宠** → **准备运行时**。它会下载、校验 SHA-256、
+staging 解包后替换，官方源不通时自动改用国内镜像。
+
 **多数情况下不用手动做**：插件启动时按 ① `DSH_DESKPET_ELECTRON` ② `<插件>/runtime/electron`
-③ `%USERPROFILE%\.dsh\dsh-deskpet\electron` ④ **`@electron/get` 本地缓存**
+③ `%USERPROFILE%\.dsh\dsh-cyberwhale\electron` ④ **`@electron/get` 本地缓存**
 （`%LOCALAPPDATA%\electron\Cache`，命中即离线解包）⑤ `<插件>/node_modules/electron/dist` 顺序找。
 
-都没有时：
+设置页按钮失败、或想指定版本时再用命令行：
 
 ```powershell
-cd D:\path\to\dsh-deskpet
+cd D:\path\to\dsh-cyberwhale
 node tools\ensure-electron.mjs                       # 默认 43.4.1
 node tools\ensure-electron.mjs --version 40.10.2     # 指定版本
 node tools\ensure-electron.mjs --force               # 强制重下（会替换已有运行时）
@@ -62,7 +68,7 @@ node tools\ensure-electron.mjs --force               # 强制重下（会替换�
 窗口出现在**光标所在那块屏幕**的右下角：透明、无边框、置顶、不进任务栏；
 鼠标移到鲸鱼身上才接管点击，透明区域点击穿透，显示时不抢编辑器焦点。
 
-设置存在 `%USERPROFILE%\.dsh\dsh-deskpet\settings.json`。
+设置存在 `%USERPROFILE%\.dsh\dsh-cyberwhale\settings.json`。
 
 ## 5. 验证清单
 
@@ -81,13 +87,13 @@ node tools\ensure-electron.mjs --force               # 强制重下（会替换�
 
 ### 桌宠完全不出现
 ```powershell
-Get-Content "$env:USERPROFILE\.dsh\profiles\desktop\package.json"   # bundles 里要有 dsh-deskpet
-Get-Item    "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-deskpet"
-Test-Path   "$env:USERPROFILE\.dsh\dsh-deskpet\electron\electron.exe"
+Get-Content "$env:USERPROFILE\.dsh\profiles\desktop\package.json"   # bundles 里要有 dsh-cyberwhale
+Get-Item    "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-cyberwhale"
+Test-Path   "$env:USERPROFILE\.dsh\dsh-cyberwhale\electron\electron.exe"
 ```
 
 ### 窗口出现但不显示鲸鱼
-- 运行时损坏：删掉 `%USERPROFILE%\.dsh\dsh-deskpet\electron` 重新准备。
+- 运行时损坏：删掉 `%USERPROFILE%\.dsh\dsh-cyberwhale\electron` 重新准备。
 - 渲染层错误会经助手 stdout 转发到 DSH 日志（搜 `[deskpet/renderer]`）。
 
 ### 鼠标点不到鲸鱼
@@ -96,7 +102,7 @@ Test-Path   "$env:USERPROFILE\.dsh\dsh-deskpet\electron\electron.exe"
 ### 退出 DSH 后还有 electron.exe
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='electron.exe'" |
-  Where-Object { $_.CommandLine -like '*dsh-deskpet*' } |
+  Where-Object { $_.CommandLine -like '*dsh-cyberwhale*' } |
   ForEach-Object { taskkill /PID $_.ProcessId /T /F }
 ```
 （插件下次启动也会自动清扫。）
@@ -108,6 +114,6 @@ Windows 上 DPI-unaware 进程会拿到**虚拟化坐标**（混合 DPI 下更�
 ### 单独调试助手窗口
 ```powershell
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
-& D:\electron-40.10.2\electron.exe D:\path\to\dsh-deskpet\helper `
-    --assets=D:\path\to\dsh-deskpet\assets --scale=1 --look-at-cursor=1 --bubbles=1
+& D:\electron-40.10.2\electron.exe D:\path\to\dsh-cyberwhale\helper `
+    --assets=D:\path\to\dsh-cyberwhale\assets --scale=1 --look-at-cursor=1 --bubbles=1
 ```

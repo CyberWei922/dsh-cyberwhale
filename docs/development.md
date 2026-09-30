@@ -23,7 +23,7 @@ npm test                 # 宿主、客户端、素材契约、状态、几何�
 | `lib/state.js` / `lib/activity.js` | 动画状态机、任务气泡文案 |
 | `lib/bridge.js` | 受管子进程和消息传输 |
 | `lib/settings.js` | 设置归一化及串行原子保存 |
-| `lib/electron-runtime.js` / `lib/orphans.js` | 运行时查找、解包及遗留进程清理 |
+| `lib/electron-runtime.js` / `lib/electron-provision.js` / `lib/orphans.js` | 运行时查找与解包、运行时下载校验、遗留进程清理 |
 | `client/index.js` | 「设置 → 桌宠」界面源码 |
 | `helper/main.js` / `helper/preload.js` | Electron 窗口、拖拽、IPC 和原生菜单 |
 | `helper/renderer/` | 动画、注视、气泡和命中区 |
@@ -33,6 +33,8 @@ npm test                 # 宿主、客户端、素材契约、状态、几何�
 ## 工作原理
 
 插件通过 Harness 的公开服务订阅任务事件，再通过 `ctx.subprocess` 启动独立 Electron 助手窗口。设置页通过插件自注册的 `/deskpet` 路由读写偏好；路由先调用官方连接服务完成请求鉴权。
+
+Electron 运行时不在安装包里。`lib/electron-provision.js` 负责把它准备好：先复用本机已有运行时或 `@electron/get` 缓存，否则从官方源下载 `electron-v<版本>-<平台>.zip`、用同源 `SHASUMS256.txt` 校验 SHA-256，再经 staging 解包后替换目标目录。官方源失败时自动改用国内镜像重试。宿主半区把它包成 `prepareRuntime` / `cancelRuntime` 两个 RPC 端点，设置页据此显示进度与取消按钮；`tools/ensure-electron.mjs` 是同一模块的命令行外壳。
 
 macOS 使用 stdin 下发消息，Windows 使用 subprocess 的 control pipe（fd 7），上行都使用 stdout JSON Lines。助手就绪或自动重启后重新同步配置、任务状态和气泡。卸载时结束受管进程，启动时清扫遗留助手。
 
@@ -60,9 +62,10 @@ macOS 和 Windows 已合入同一 `main`，不维护两套插件包。新增改�
 npm run verify:gaze
 npm run verify:bubble-placement
 npm run verify:bubble-render
+npm run verify:bubble-motion
 ```
 
-脚本会启动测试窗口。注视验证注入测试光标，不移动用户真实鼠标；气泡验证覆盖边缘避让及深浅外观。
+脚本会启动测试窗口。注视验证注入测试光标，不移动用户真实鼠标；气泡验证覆盖边缘避让、深浅外观、原生窗口裁剪和移动过程中的连续动画。
 
 Windows 的真机验证与未覆盖场景见 [windows-adaptation.md](windows-adaptation.md)，安装和调试方式见 [windows-install.md](windows-install.md)。
 
@@ -81,6 +84,8 @@ node tools/check-consistency.mjs <帧目录>
 当前招手为自然屈肘、小幅左右摆动，播放约 2.6 秒后停在收手帧；待机眨眼约每 6 秒一次。素材生成记录见 [自然招手说明](waving-v5.md)。修改播放时序后，请同步状态机、渲染层、规格和相应测试。
 
 气泡的文字、背景及尾巴通过 CSS 变量统一配色，修改后检查深浅外观，避免背景变了而字色未跟随。
+
+气泡固定宽度为 323px，透明窗口左右各预留让位空间。屏幕避让同时检查窗口的实际绘图区；位置随窗口移动同步，渲染层用临界阻尼弹簧连续移动和翻转。保存的位置继续沿用原来窄窗口的坐标，以保持已有桌宠位置。
 
 ## 提交改动
 

@@ -1,0 +1,84 @@
+name: Release
+
+# 推一个 v* tag 就同时走两条通道：
+#   1. GitHub Release + 附件 .tgz（不需要任何账号，永远执行）
+#   2. 发布到 npm（只有配置了 NPM_TOKEN 才执行，没配置就跳过并留一条 notice）
+#
+# 详见 docs/distribution.md。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # 创建 Release、上传附件
+  id-token: write # npm provenance 需要
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      # tag 和 package.json 的版本必须一致，否则 npm 会拒收或发错版本
+      - name: 校验 tag 与 package.json 版本一致
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          echo "tag=$tag package.json=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag 与 package.json 的 $pkg 不一致，请先改 package.json 再打 tag"
+            exit 1
+          fi
+
+      # 仓库提交了构建产物，但发布前重建一次，保证 lib/client.js 与 client/index.js 同步
+      - name: 重建客户端产物
+        run: node client/build.mjs
+
+      - name: 产物与源码是否同步
+        run: |
+          if ! git diff --quiet -- lib/client.js; then
+            echo "::error::lib/client.js 与 client/index.js 不同步，请本地跑 node client/build.mjs 后提交"
+            git --no-pager diff --stat -- lib/client.js
+            exit 1
+          fi
+
+      # 与平台无关的测试。test-host 依赖本机进程扫描（ps/Electron），在 CI 上不稳定，故不跑。
+      - name: 测试
+        run: |
+          node tools/test-provision.mjs
+          node tools/test-client.mjs
+          node tools/test-atlas.mjs
+          node tools/test-activity.mjs
+          node tools/test-geometry.mjs
+          node tools/test-platform.mjs
+          node tools/test-regressions.mjs
+          node tools/test-orphans.mjs
+
+      - name: 打包
+        run: npm pack
+
+      - name: 创建 GitHub Release 并附上 .tgz
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.tgz'
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      # 没配 NPM_TOKEN 时安静跳过 —— 这样在注册 npm 账号之前，
+      # 打 tag 也能正常产出 GitHub Release。
+      - name: 发布到 npm（未配置 NPM_TOKEN 则跳过）
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::notice title=跳过 npm 发布::仓库没有配置 NPM_TOKEN secret，本次只发布 GitHub Release。配置方式见 docs/distribution.md。"
+            exit 0
+          fi
+          npm publish --provenance

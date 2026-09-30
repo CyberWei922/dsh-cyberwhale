@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createPetState } from '../lib/state.js';
 import { saveSettings, loadSettings } from '../lib/settings.js';
+import { BUBBLE_WIDTH, computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
 
 let now = 0;
 const pet = createPetState({ now: () => now });
@@ -42,7 +43,15 @@ try {
   console.log('✓ 并发设置保存保持调用顺序，失败后可恢复');
 
   const callbacks = {};
-  const element = () => ({ dataset: {}, style: {}, getContext: () => ({}), getBoundingClientRect: () => ({}) });
+  const elements = new Map();
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      dataset: {}, style: { setProperty(name, value) { this[name] = value; } },
+      offsetWidth: BUBBLE_WIDTH, offsetHeight: 32,
+      getContext: () => ({ setTransform() {} }), getBoundingClientRect: () => ({}),
+    });
+    return elements.get(id);
+  };
   const host = { config: {}, loadAssets: async () => ({ error: 'test fallback' }) };
   for (const name of ['State', 'Probe', 'Layout', 'Bubble', 'Config', 'DragDirection', 'Reload', 'Cursor']) {
     host[`on${name}`] = (callback) => { callbacks[name] = callback; };
@@ -51,7 +60,7 @@ try {
   host.dragEnd = () => {};
   const events = {};
   const sandbox = {
-    window: { petHost: host, addEventListener: (name, callback) => { events[name] = callback; } },
+    window: { petHost: host, innerWidth: computeMetrics(ENVELOPE_SCALE).width, innerHeight: computeMetrics(ENVELOPE_SCALE).height, addEventListener: (name, callback) => { events[name] = callback; } },
     document: { getElementById: element },
     performance: { now: () => now },
     requestAnimationFrame: () => {},
@@ -101,6 +110,47 @@ try {
   now += 3_600_000;
   assert.ok(sandbox.testState.liveUntil > now);
   console.log('✓ 拖动结束恢复最新任务动画，长任务气泡持续显示');
+
+  vm.runInContext('globalThis.testBubblePosition = positionBubble; globalThis.testBubbleStep = stepBubbleAxis; globalThis.testBubbleMotion = () => ({ motion: bubbleMotion, target: bubbleFrameCache });', sandbox);
+  const metrics = computeMetrics(ENVELOPE_SCALE);
+  const layout = { left: 0, top: 0, right: metrics.width, bottom: metrics.height, petBottom: 340, bubbleWidth: BUBBLE_WIDTH };
+  const bubbleElement = elements.get('bubble');
+  bubbleElement.dataset.visible = '0';
+  callbacks.Layout(layout);
+  sandbox.testBubblePosition();
+  bubbleElement.dataset.visible = '1';
+  const aboveY = sandbox.testBubbleMotion().motion.y.value;
+  callbacks.Layout({ ...layout, top: 100 });
+  sandbox.testBubblePosition(16);
+  const flipped = sandbox.testBubbleMotion();
+  assert.equal(flipped.target.side, 'below');
+  assert.ok(flipped.motion.y.value > aboveY && flipped.motion.y.value < flipped.target.top);
+  assert.equal(bubbleElement.dataset.visible, '1');
+  for (let frame = 0; frame < 60; frame++) sandbox.testBubblePosition(16);
+  assert.ok(Math.abs(sandbox.testBubbleMotion().motion.y.value - flipped.target.top) < 0.1);
+  callbacks.Layout({ ...layout, top: 80 });
+  sandbox.testBubblePosition(16);
+  assert.equal(sandbox.testBubbleMotion().target.side, 'below');
+  callbacks.Layout(layout);
+  sandbox.testBubblePosition(16);
+  const returning = sandbox.testBubbleMotion();
+  assert.equal(returning.target.side, 'above');
+  assert.ok(returning.motion.y.value > returning.target.top);
+  console.log('✓ 上下翻转保持可见、经过中间帧，并在边界阈值附近保持稳定');
+
+  callbacks.Layout({ ...layout, left: 241 });
+  sandbox.testBubblePosition(16);
+  assert.ok(sandbox.testBubbleMotion().motion.x.value >= 247);
+  callbacks.Layout(layout);
+  sandbox.testBubblePosition(16);
+  const sliding = sandbox.testBubbleMotion();
+  assert.ok(sliding.motion.x.value > sliding.target.left && sliding.motion.x.value < 247);
+  const at60Hz = { value: 0, velocity: 0 };
+  const at30Hz = { value: 0, velocity: 0 };
+  for (let frame = 0; frame < 60; frame++) sandbox.testBubbleStep(at60Hz, 100, 1000 / 60);
+  for (let frame = 0; frame < 30; frame++) sandbox.testBubbleStep(at30Hz, 100, 1000 / 30);
+  assert.ok(Math.abs(at60Hz.value - at30Hz.value) < 0.01);
+  console.log('✓ 水平让位后平滑回到中间，不同帧率下的动画一致');
 
   // 在内存中延迟运行时探测，复现关闭/卸载与异步启动交错；不启动真实窗口。
   const hostSource = (await readFile(new URL('../lib/index.js', import.meta.url), 'utf8'))

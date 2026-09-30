@@ -1,8 +1,8 @@
 {
-  "name": "dsh-deskpet-helper",
+  "name": "dsh-cyberwhale-helper",
   "version": "0.1.0",
   "private": true,
-  "description": "dsh-deskpet 的 Electron 助手进程：透明置顶桌宠窗口",
+  "description": "dsh-cyberwhale 的 Electron 助手进程：透明置顶桌宠窗口",
   "main": "main.js",
   "type": "commonjs"
 }

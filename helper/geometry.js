@@ -6,7 +6,7 @@
  * 单独拆出来是为了**可测试**：位置限制这类逻辑以前埋在 `main.js` 里，
  * 只能靠肉眼看，于是"拖不上去"这种 bug 一直没被发现。
  *
- * @module dsh-deskpet/helper-geometry
+ * @module dsh-cyberwhale/helper-geometry
  */
 
 /**
@@ -20,6 +20,9 @@ const MARGIN = 14;
 
 /** 宠物头顶预留的气泡空间（按缩放换算）。必须与渲染层一致。 */
 const BUBBLE_SPACE = 74;
+
+/** 气泡固定宽度，沿用原来 335px 窗口下的最大宽度。 */
+const BUBBLE_WIDTH = 323;
 
 /**
  * 窗口尺寸按「最大档位」固定，之后**永不改变**。
@@ -49,10 +52,16 @@ function computeMetrics(value) {
   const petWidth = Math.round(CELL.width * value);
   const petHeight = Math.round(CELL.height * value);
   const bubble = Math.round(BUBBLE_SPACE * value);
+  // 宠物贴边时，气泡最多会完全移到身体的一侧。左右各预留一整块气泡，
+  // 保证让位后的气泡及阴影仍在原生窗口内；窗口本身继续保持固定尺寸。
+  const width = Math.max(petWidth, BUBBLE_WIDTH * 2) + MARGIN * 2;
   return {
     petWidth,
     petHeight,
-    width: petWidth + MARGIN * 2,
+    width,
+    bubbleWidth: BUBBLE_WIDTH,
+    // CLI / 设置文件继续沿用原来窄窗口的坐标，扩大绘图区不挪动桌宠。
+    positionOffsetX: Math.round((width - petWidth - MARGIN * 2) / 2),
     // 宠物上下**各留一块**气泡空间。
     //
     // 只留上方是不够的：角色被拖到屏幕顶部时，气泡在头顶就会跑到屏幕外。
@@ -149,6 +158,7 @@ module.exports = {
   CELL,
   MARGIN,
   BUBBLE_SPACE,
+  BUBBLE_WIDTH,
   ENVELOPE_SCALE,
   clamp,
   computeMetrics,

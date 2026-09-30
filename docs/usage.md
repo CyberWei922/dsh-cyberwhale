@@ -4,35 +4,33 @@
 
 ## 更新与卸载
 
-**更新：**完全退出 Harness，在插件文件夹执行：
+**更新：**插件目前不支持自动升级。在 Harness 的插件页卸载后重新安装新版，再完全退出、重新打开应用。
 
-```bash
-git pull --ff-only
-```
+用命令行 `link:` 安装的开发用户，直接在插件文件夹执行 `git pull --ff-only` 即可，改完重启 Harness 生效。
 
-然后重新打开 Harness。使用 ZIP 安装的用户，请将新版文件覆盖到原来的插件目录。更新后保留相同路径；修改了路径则需要重新安装。
-
-**卸载：**在 Harness 的插件管理页面移除 `dsh-deskpet`，并完全退出、重新打开应用。只想暂时隐藏时，关闭桌宠开关即可。
+**卸载：**在 Harness 的插件管理页面移除 `dsh-cyberwhale`，并完全退出、重新打开应用。只想暂时隐藏时，关闭桌宠开关即可。
 
 ## 常见问题
 
 ### 设置里没有「桌宠」
 
-确认安装命令已成功完成，并且使用了 `--profile desktop`。安装后需要**完全退出再打开** Harness，只关闭主窗口可能没有结束后台进程。
+确认插件已安装并启用（插件页里该组合包处于开启状态）。安装后需要**完全退出再打开** Harness，只关闭主窗口可能没有结束后台进程。
 
 ### 有设置页，但桌宠没有出现
 
-先检查「启用桌宠」开关和设置页里的运行状态、错误提示。若提示找不到 Electron，请回到插件文件夹重新运行对应系统的准备命令，再重启 Harness。若位置异常，尝试「重置位置」。
+先检查「启用桌宠」开关和设置页里的运行状态、错误提示。若提示缺少运行环境，点这一行的**准备运行时**即可，失败时可以再点一次重试。若位置异常，尝试「重置位置」。
 
-### Electron 下载失败或很慢
+### 准备运行时下载失败或很慢
 
-可以换用镜像下载：
+设置页的**准备运行时**会先从 Electron 官方源下载，官方源不通时会自动改用国内镜像，所以大多数情况下再点一次就好。
+
+仍然失败时，可以在插件目录用命令行指定镜像：
 
 ```bash
 node tools/ensure-electron.mjs --mirror https://registry.npmmirror.com/-/binary/electron
 ```
 
-Windows 可追加 `--version 40.10.2`。准备运行时后完全重启 Harness。代理、网络和 Windows 安装问题还可查看 [Windows 排障指南](windows-install.md#6-排障)。
+Windows 可追加 `--version 40.10.2`。准备完成后完全重启 Harness。代理、网络和 Windows 安装问题还可查看 [Windows 排障指南](windows-install.md#6-排障)。
 
 ### 鼠标移过去，眼睛为什么没有跟随？
 
@@ -42,10 +40,10 @@ Windows 可追加 `--version 40.10.2`。准备运行时后完全重启 Harness�
 
 默认位置：
 
-- macOS：`~/.dsh/dsh-deskpet/settings.json`
-- Windows：`%USERPROFILE%\.dsh\dsh-deskpet\settings.json`
+- macOS：`~/.dsh/dsh-cyberwhale/settings.json`
+- Windows：`%USERPROFILE%\.dsh\dsh-cyberwhale\settings.json`
 
-如果配置了 `DSH_HOME`，则位于该目录下的 `dsh-deskpet/settings.json`。
+如果配置了 `DSH_HOME`，则位于该目录下的 `dsh-cyberwhale/settings.json`。
 
 ## 当前限制与问题反馈
 
@@ -54,5 +52,5 @@ Windows 可追加 `--version 40.10.2`。准备运行时后完全重启 Harness�
 - Windows 的混合 DPI 跨屏拖拽、显示器热插拔等场景尚未充分验证，详见 [Windows 验证范围](windows-adaptation.md#5-明确未验证的部分)。
 - 点击区域按身体的矩形范围判断，透明边缘可能接管少量点击。
 
-遇到问题请到 [GitHub Issues](https://github.com/CyberWei922/dsh-deskpet/issues) 反馈，并附上系统版本、Harness 版本、复现步骤和设置页中的错误信息；有截图会更容易定位。
+遇到问题请到 [GitHub Issues](https://github.com/CyberWei922/dsh-cyberwhale/issues) 反馈，并附上系统版本、Harness 版本、复现步骤和设置页中的错误信息；有截图会更容易定位。
 

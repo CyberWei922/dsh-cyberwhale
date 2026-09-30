@@ -26,7 +26,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ELECTRON = join(
   process.env.HOME,
   '.dsh',
-  'dsh-deskpet',
+  'dsh-cyberwhale',
   'electron',
   'Electron.app',
   'Contents',

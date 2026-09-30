@@ -21,7 +21,7 @@ const {
 
 
 /**
- * dsh-deskpet 助手进程（Electron 主进程）。
+ * dsh-cyberwhale 助手进程（Electron 主进程）。
  *
  * 这个进程由 DSH 的宿主插件通过 `ctx.subprocess.spawn` 拉起，唯一职责是
  * 创建一个「透明 / 无边框 / 永远置顶 / 可点击穿透 / 跨所有 Space」的窗口，
@@ -116,7 +116,7 @@ function defaultPosition() {
   const display = screen.getDisplayNearestPoint(cursor);
   const area = display.workArea;
   return {
-    x: area.x + area.width - metrics.width - 24,
+    x: area.x + area.width - metrics.width - 24 + metrics.positionOffsetX,
     y: area.y + area.height - metrics.height - 24,
   };
 }
@@ -135,7 +135,11 @@ function defaultPosition() {
  *   100% / 125% / 150% 混合缩放与负坐标副屏都不需要换算。
  */
 function clampToDisplay(x, y) {
-  const area = screen.getDisplayNearestPoint({ x, y }).workArea;
+  const pet = petRectInWindow(metrics, scale);
+  const area = screen.getDisplayNearestPoint({
+    x: Math.round(x + pet.left + pet.width / 2),
+    y: Math.round(y + pet.top + pet.height / 2),
+  }).workArea;
   return clampToArea(x, y, metrics, scale, area);
 }
 
@@ -161,7 +165,9 @@ function reclampToNearestDisplay() {
 
 function createWindow() {
   const initial =
-    Number.isFinite(startX) && Number.isFinite(startY) ? clampToDisplay(startX, startY) : defaultPosition();
+    Number.isFinite(startX) && Number.isFinite(startY)
+      ? clampToDisplay(startX - metrics.positionOffsetX, startY)
+      : defaultPosition();
 
   win = new BrowserWindow({
     width: metrics.width,
@@ -241,7 +247,12 @@ function createWindow() {
     screen.on('display-metrics-changed', reclampToNearestDisplay);
   }
 
+  win.on('move', emitLayout);
   win.on('moved', reportPosition);
+  win.webContents.on('did-finish-load', () => {
+    lastLayoutKey = null;
+    emitLayout();
+  });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
@@ -255,36 +266,31 @@ let reportTimer = null;
  * 气泡靠它决定：头顶放不下就翻到脚底；贴屏幕左边就往右让。
  * 只发屏幕几何，不发像素 —— 气泡的实际摆放由渲染层算（它才知道气泡多大）。
  *
- * 节流 120ms：拖动时每帧都发没必要，但也不能太慢，否则气泡会让位不及时。
+ * 拖动时随每次窗口移动同步；持久化位置仍单独防抖，不能拿它的频率驱动动画。
  */
-let layoutTimer = null;
+let lastLayoutKey = null;
 
 function emitLayout() {
-  if (layoutTimer !== null) return;
-  layoutTimer = setTimeout(() => {
-    layoutTimer = null;
-    if (win === null || win.isDestroyed()) return;
-    const [wx, wy] = win.getPosition();
-    const center = { x: wx + Math.round(metrics.width / 2), y: wy + Math.round(metrics.height / 2) };
-    const area = screen.getDisplayNearestPoint(center).workArea;
-    // 宠物在窗口里的底边位置由**主进程**决定并下发。
-    // 为什么不让渲染层自己算：窗口是按最大档位预留的，宠物不在窗口底部，
-    // 两处各算一遍是重复事实来源 —— 曾经就是这里对不上，导致主进程以为宠物
-    // 在 y=132、渲染层实际画在 y=375，位置限制和气泡锚点全错。
-    const pet = petRectInWindow(metrics, scale);
-    win.webContents.send('pet:layout', {
-      left: area.x - wx,
-      top: area.y - wy,
-      right: area.x + area.width - wx,
-      bottom: area.y + area.height - wy,
-      width: metrics.width,
-      height: metrics.height,
-      // 宠物底边距窗口顶边的距离（CSS 像素）
-      petBottom: pet.top + pet.height,
-      scale,
-    });
-  }, 120);
-  layoutTimer.unref?.();
+  if (win === null || win.isDestroyed()) return;
+  const [wx, wy] = win.getPosition();
+  const pet = petRectInWindow(metrics, scale);
+  const center = { x: wx + Math.round(pet.left + pet.width / 2), y: wy + Math.round(pet.top + pet.height / 2) };
+  const area = screen.getDisplayNearestPoint(center).workArea;
+  const key = [wx, wy, scale, area.x, area.y, area.width, area.height].join(':');
+  if (key === lastLayoutKey) return;
+  lastLayoutKey = key;
+  // 宠物底边由主进程下发，屏幕与窗口边界也必须来自同一时刻的位置。
+  win.webContents.send('pet:layout', {
+    left: area.x - wx,
+    top: area.y - wy,
+    right: area.x + area.width - wx,
+    bottom: area.y + area.height - wy,
+    width: metrics.width,
+    height: metrics.height,
+    bubbleWidth: metrics.bubbleWidth,
+    petBottom: pet.top + pet.height,
+    scale,
+  });
 }
 
 function reportPosition() {
@@ -295,7 +301,7 @@ function reportPosition() {
     const [x, y] = win.getPosition();
     if (lastReported !== null && lastReported.x === x && lastReported.y === y) return;
     lastReported = { x, y };
-    toHost({ t: 'moved', x, y });
+    toHost({ t: 'moved', x: x + metrics.positionOffsetX, y });
     emitLayout();
   }, 400);
   reportTimer.unref?.();
@@ -516,7 +522,14 @@ ipcMain.on('pet:renderer-error', (_event, message) => {
 ipcMain.on('pet:moved-by-user', () => reportPosition());
 // 渲染层对 pet:probe 的回答，转给宿主
 ipcMain.on('pet:probe-result', (_event, data) => {
-  toHost({ t: 'probe', ...(data ?? {}) });
+  if (win === null || win.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  const pet = petRectInWindow(metrics, scale);
+  const workArea = screen.getDisplayNearestPoint({
+    x: Math.round(x + pet.left + pet.width / 2),
+    y: Math.round(y + pet.top + pet.height / 2),
+  }).workArea;
+  toHost({ t: 'probe', ...(data ?? {}), windowPosition: { x, y }, workArea });
 });
 
 // ── IPC：主进程 → 渲染进程（由 stdin 驱动）─────────────────────────────────
@@ -580,6 +593,14 @@ function dispatch(message) {
         win.webContents.send('pet:cursor', cursorOverride);
       }
       break;
+    case 'probe-position': {
+      // 桌面验证用：模拟窗口移动，不触碰用户的真实光标。
+      if (!Number.isFinite(message.x) || !Number.isFinite(message.y)) break;
+      const target = clampToDisplay(message.x, message.y);
+      win.setPosition(target.x, target.y);
+      emitLayout();
+      break;
+    }
     case 'capture': {
       // 调试用：把窗口内容截一张 PNG 出来。
       // 外部 screencapture 需要屏幕录制权限，这条路不需要，而且抓到的正是

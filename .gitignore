@@ -18,6 +18,10 @@ individual-draft/
 output/
 regenerated-pet-*/
 
+# 安装验证用的临时 DSH home 与 pnpm store（见 docs/distribution.md）
+.scratch-*/
+.npm-cache/
+
 # 系统
 .DS_Store
 *.log

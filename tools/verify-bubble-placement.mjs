@@ -20,13 +20,13 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CELL, ENVELOPE_SCALE, computeMetrics } from '../helper/geometry.js';
+import { BUBBLE_WIDTH, CELL, ENVELOPE_SCALE, computeMetrics, petRectInWindow } from '../helper/geometry.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ELECTRON = join(
   process.env.HOME,
   '.dsh',
-  'dsh-deskpet',
+  'dsh-cyberwhale',
   'electron',
   'Electron.app',
   'Contents',
@@ -69,7 +69,8 @@ async function getWorkAreas() {
 
 /** 找出窗口中心落在（或最接近）哪块屏上。 */
 function displayFor(areas, windowX, windowY) {
-  const center = { x: windowX + 167, y: windowY + 298 };
+  const pet = petRectInWindow(computeMetrics(ENVELOPE_SCALE), SCALE);
+  const center = { x: windowX + pet.left + pet.width / 2, y: windowY + pet.top + pet.height / 2 };
   let best = areas[0];
   let bestDistance = Infinity;
   for (const area of areas) {
@@ -110,7 +111,7 @@ async function probe(name, { x, y }) {
   await sleep(6500);
   const ready = messages().find((message) => message.t === 'ready');
 
-  send({ t: 'bubble', text: BUBBLE_TEXT });
+  send({ t: 'bubble', status: BUBBLE_TEXT });
   await sleep(500);
 
   let probed = null;
@@ -124,7 +125,7 @@ async function probe(name, { x, y }) {
   await sleep(400);
   child.kill('SIGTERM');
   if (probed === null) throw new Error('探针失败（' + name + '）：\n' + out.slice(0, 400));
-  return { probed, ready };
+  return { probed, ready: { ...ready, ...probed.windowPosition } };
 }
 
 async function main() {
@@ -135,6 +136,11 @@ async function main() {
     results.push([label, ok]);
     console.log('  ' + (ok ? '✓' : '✗') + ' ' + label);
     if (detail !== undefined) console.log('      ' + detail);
+  };
+  const checkWindow = (probed) => {
+    const { bubble, window } = probed;
+    add('整个气泡都在原生窗口的绘图区内', bubble.left >= BUBBLE_EDGE - 1 && bubble.left + bubble.width <= window.width - BUBBLE_EDGE + 1 && bubble.top >= 0 && bubble.top + bubble.height <= window.height);
+    add('贴边后气泡仍保持固定宽度', Math.abs(bubble.width - BUBBLE_WIDTH) < 1);
   };
 
   console.log('\n共 ' + areas.length + ' 块屏幕：');
@@ -151,6 +157,7 @@ async function main() {
         '  气泡 y ' + bubble.top.toFixed(0) + '~' + (bubble.top + bubble.height).toFixed(0) + '  side=' + probed.bubbleSide,
     );
     add('气泡翻到了脚底', probed.bubbleSide === 'below' && bubble.top >= pet.top + pet.height - 1);
+    checkWindow(probed);
     console.log();
   }
 
@@ -167,6 +174,7 @@ async function main() {
       bubble.left >= viewLeftLocal + BUBBLE_EDGE - 1,
       '气泡 left ' + bubble.left.toFixed(1) + ' ≥ 边界 ' + viewLeftLocal + ' + 留白 ' + BUBBLE_EDGE,
     );
+    checkWindow(probed);
     console.log();
   }
 
@@ -187,6 +195,7 @@ async function main() {
       bubble.left + bubble.width <= viewRightLocal - BUBBLE_EDGE + 1,
       '气泡 right ' + (bubble.left + bubble.width).toFixed(1) + ' ≤ 边界 ' + viewRightLocal + ' - 留白 ' + BUBBLE_EDGE,
     );
+    checkWindow(probed);
     console.log();
   }
 

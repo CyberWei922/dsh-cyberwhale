@@ -1,4 +1,4 @@
-# dsh-deskpet 🐋
+# dsh-cyberwhale 🐋
 
 一只陪你使用 [DeepSeek Harness 官方 Desktop](https://github.com/deepseek-ai/deepseek-harness) 的鲸鱼少女桌宠。
 
@@ -14,46 +14,53 @@
 
 ## 安装
 
-需要先安装 Harness Desktop 和 [Node.js 22+](https://nodejs.org/)。启动一次 Harness 完成初始化，然后**完全退出应用**。
+需要 [Harness Desktop](https://github.com/deepseek-ai/deepseek-harness) 和 [Node.js 22+](https://nodejs.org/)。先启动一次 Harness 完成初始化。
 
-**1. 下载项目**
+**1. 在 Harness 里安装插件**
 
-```bash
-git clone https://github.com/CyberWei922/dsh-deskpet.git
-cd dsh-deskpet
+侧栏 → **插件** → **添加插件**，把仓库地址粘贴进输入框：
+
+```
+https://github.com/CyberWei922/dsh-cyberwhale
 ```
 
-也可用 **Code → Download ZIP** 下载，解压后进入该文件夹。安装后请保留目录位置，无需构建或生成素材。
+点**安装**，装完点**立即启用**。安装源保持默认即可。发布到 npm 之后，这里也可以直接填包名 `dsh-cyberwhale`。
 
-**2. 按系统执行安装命令**
+装不上的话有两条备选：到 [Releases](https://github.com/CyberWei922/dsh-cyberwhale/releases) 下载 `.tgz`，把下载直链或本地文件路径粘进同一个输入框；或者改成命令行从本地目录安装（见下方折叠块）。
+
+**2. 准备运行环境**
+
+设置 → **桌宠** → **准备运行时**。桌宠需要一个独立的 Electron 运行时（约 110 MB），安装包里不含它；这一步从官方源下载并校验，官方源不通时会自动改用国内镜像。下载进度就在同一张卡上。
+
+**3. 启用桌宠**
+
+同一个设置页里打开**启用桌宠**，鲸鱼就会出现。
+
+如果设置里没有「桌宠」，完全退出 Harness 再重新打开 —— 只关主窗口可能没有结束后台进程。
 
 <details>
-<summary>macOS：在终端运行</summary>
+<summary>命令行安装（不常用，排障或离线时用）</summary>
 
 ```bash
-node tools/ensure-electron.mjs
+git clone https://github.com/CyberWei922/dsh-cyberwhale.git
+cd dsh-cyberwhale
+
+node tools/ensure-electron.mjs        # 提前准备运行时，也可以之后在设置页点按钮
 
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
   plugin --profile desktop add "$PWD"
 ```
 
-</details>
-
-<details>
-<summary>Windows 11 x64：在 PowerShell 运行</summary>
+Windows 11 把最后一行换成：
 
 ```powershell
-node tools/ensure-electron.mjs --version 40.10.2
-
 & "$env:LOCALAPPDATA\Programs\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd" `
   plugin --profile desktop add "$($PWD.Path)"
 ```
 
+这种方式用 `link:` 指向你的工作目录，适合改代码；改完重启 Harness 即可看到效果。命令使用 Harness 的默认安装位置，自定义安装请替换路径。
+
 </details>
-
-命令使用 Harness 的默认安装位置；自定义安装请替换路径。Electron 准备脚本会优先复用本机运行时或缓存，没有时才下载。
-
-**3. 重新打开 Harness → 设置 → 桌宠 → 启用桌宠。**
 
 ## 使用
 
@@ -69,10 +76,11 @@ node tools/ensure-electron.mjs --version 40.10.2
 ## 常见问题
 
 - **没有设置页？** 确认安装成功，完全退出并重开 Harness。
-- **桌宠没出现？** 检查启用开关和设置页错误提示；位置异常时尝试「重置位置」。
-- **更新怎么做？** 退出 Harness，在插件目录运行 `git pull --ff-only`，再重新打开。
+- **桌宠没出现？** 看设置页的运行状态和错误提示；提示缺少运行环境时点**准备运行时**，位置异常时点**重置位置**。
+- **插件页说安装失败？** 见 [使用与排障](docs/usage.md)。
+- **更新怎么做？** 插件目前不支持自动升级：在插件页卸载后重新安装新版，再完全重开 Harness。
 
-[更多排障与卸载说明](docs/usage.md) · [Windows 安装指南](docs/windows-install.md) · [反馈问题](https://github.com/CyberWei922/dsh-deskpet/issues)
+[更多排障与卸载说明](docs/usage.md) · [Windows 安装指南](docs/windows-install.md) · [分发与发布](docs/distribution.md) · [反馈问题](https://github.com/CyberWei922/dsh-cyberwhale/issues)
 
 目前多会话共用桌宠状态；Windows 混合 DPI 拖拽、热插拔等场景尚未充分验证。详见 [验证范围](docs/windows-adaptation.md#5-明确未验证的部分)。
 

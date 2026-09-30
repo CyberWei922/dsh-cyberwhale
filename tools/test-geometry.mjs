@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises';
 
 import {
   BUBBLE_SPACE,
+  BUBBLE_WIDTH,
   CELL,
   ENVELOPE_SCALE,
   MARGIN,
@@ -54,6 +55,7 @@ console.log('\n[1] 几何常量必须与渲染层一致');
 
   check('MARGIN 与渲染层一致', numberIn(geometrySource, 'MARGIN'), numberIn(petSource, 'MARGIN'));
   check('BUBBLE_SPACE 与渲染层一致', numberIn(geometrySource, 'BUBBLE_SPACE'), numberIn(petSource, 'BUBBLE_SPACE'));
+  check('BUBBLE_WIDTH 与渲染层一致', BUBBLE_WIDTH, numberIn(petSource, 'BUBBLE_WIDTH'));
 
   const cellIn = (source) => {
     const found = /const CELL = \{ width: (\d+), height: (\d+) \}/.exec(source);
@@ -109,16 +111,30 @@ console.log('\n[1] 几何常量必须与渲染层一致');
 // ── 尺寸公式 ──────────────────────────────────────────────────────────────
 console.log('\n[2] 尺寸公式');
 {
-  check('1.0 档窗口宽 220', computeMetrics(1.0).width, 220);
-  check('1.6 档窗口宽 335', computeMetrics(1.6).width, 335);
+  check('1.0 档窗口预留左右让位空间', computeMetrics(1.0).width >= BUBBLE_WIDTH * 2 + MARGIN * 2, true);
+  check('1.6 档窗口预留左右让位空间', computeMetrics(1.6).width >= BUBBLE_WIDTH * 2 + MARGIN * 2, true);
   // 高度 = 宠物 + 上下边距 + 上下各一块气泡空间
   check('1.6 档窗口高 597（含上下两块气泡空间）', computeMetrics(1.6).height, 597);
-  check('窗口宽 = 宠物宽 + 2×MARGIN', computeMetrics(1.0).width, computeMetrics(1.0).petWidth + MARGIN * 2);
+  check('扩大绘图区后气泡仍为原先的最大宽度', computeMetrics(1.0).bubbleWidth, 323);
   check(
     '窗口高 = 宠物高 + 2×MARGIN + 2×气泡空间',
     computeMetrics(1.0).height,
     computeMetrics(1.0).petHeight + MARGIN * 2 + Math.round(BUBBLE_SPACE * 1.0) * 2,
   );
+}
+
+console.log('\n[3c] 气泡左右让位不能被原生窗口截断');
+{
+  for (const scale of [0.45, 0.5, 0.7, 1.0, 1.6]) {
+    const pet = petRectInWindow(windowMetrics, scale);
+    // 左贴边时气泡向身体右侧移动，右贴边时反向移动。
+    const leftBubbleRight = pet.left + BUBBLE_WIDTH + 6;
+    const rightBubbleLeft = pet.left + pet.width - BUBBLE_WIDTH - 6;
+    check(`档位 ${scale}：左贴边后气泡和阴影都在窗口内`, leftBubbleRight + MARGIN <= windowMetrics.width, true);
+    check(`档位 ${scale}：右贴边后气泡和阴影都在窗口内`, rightBubbleLeft >= MARGIN, true);
+  }
+  const legacyWidth = Math.round(CELL.width * ENVELOPE_SCALE) + MARGIN * 2;
+  check('旧位置坐标在扩大绘图区后保持宠物中心（误差 ≤0.5px）', Math.abs(windowMetrics.width / 2 - windowMetrics.positionOffsetX - legacyWidth / 2) <= 0.5, true);
 }
 
 // ── 宠物在窗口里的矩形 ────────────────────────────────────────────────────

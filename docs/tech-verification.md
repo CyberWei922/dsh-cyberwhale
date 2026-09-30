@@ -127,7 +127,7 @@
 ## 3.2 仓库结构
 
 ```
-dsh-deskpet/
+dsh-cyberwhale/
 ├── package.json                 # name / version / dsh.bundle.patch / peerDependencies
 ├── cordis.patch.yml             # 插件行注册
 ├── lib/
@@ -291,7 +291,7 @@ win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 官方**没有 slider 组件**（全仓库 `type="range"` 零命中），因此「显示大小」改用官方的
 `SegmentedControl` 表达离散档位（小/中/大/特大）。
 
-本项目设置页即按此实现：`id: 'dsh-deskpet'`、`order: 90`（最下方）。
+本项目设置页即按此实现：`id: 'dsh-cyberwhale'`、`order: 90`（最下方）。
 
 ## 4.5 Dock 图标：**已实测可隐藏**（原判断有误，特此更正）
 

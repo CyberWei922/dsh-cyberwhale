@@ -40,16 +40,16 @@ function check(label, actual, expected) {
   }
 }
 
-const workspace = join(tmpdir(), `dsh-deskpet-orphans-${process.pid}`);
+const workspace = join(tmpdir(), `dsh-cyberwhale-orphans-${process.pid}`);
 const isWin = process.platform === 'win32';
 const HELPER = isWin
-  ? 'D:\\dsh\\profiles\\desktop\\node_modules\\dsh-deskpet\\helper'
-  : '/Users/me/.dsh/profiles/desktop/node_modules/dsh-deskpet/helper';
+  ? 'D:\\dsh\\profiles\\desktop\\node_modules\\dsh-cyberwhale\\helper'
+  : '/Users/me/.dsh/profiles/desktop/node_modules/dsh-cyberwhale/helper';
 
 console.log('\n[1] Electron 命令行识别');
 {
   const cases = [
-    [`"C:\\Users\\me\\AppData\\Local\\dsh-deskpet\\electron\\electron.exe" "${HELPER}" --assets=x`, true],
+    [`"C:\\Users\\me\\AppData\\Local\\dsh-cyberwhale\\electron\\electron.exe" "${HELPER}" --assets=x`, true],
     [`"D:\\probe\\electron-40.10.2\\electron.exe" "D:\\dsh\\helper" --evidence=y`, true],
     [`"C:\\tools\\my-electron-helper\\runner.exe" "${HELPER}"`, false],
     [`/Applications/DeepSeek Harness.app/Contents/Resources/runtime/electron/Electron "${HELPER}" --assets=x`, true],
@@ -57,8 +57,8 @@ console.log('\n[1] Electron 命令行识别');
     [`bash -c "echo ${HELPER}"`, false],
     [`"C:\\Windows\\explorer.exe" "${HELPER}"`, false],
     ['C:\\tools\\electron.exe', true],
-    ['/bin/sh /tmp/Electron /tmp/dsh-deskpet/helper', false],
-    ['/usr/bin/python /tmp/Electron /tmp/dsh-deskpet/helper', false],
+    ['/bin/sh /tmp/Electron /tmp/dsh-cyberwhale/helper', false],
+    ['/usr/bin/python /tmp/Electron /tmp/dsh-cyberwhale/helper', false],
   ];
   for (const [command, expected] of cases) {
     check(`isElectronCommand(${JSON.stringify(command.slice(0, 58))}...)`, isElectronCommand(command), expected);
@@ -125,7 +125,7 @@ console.log('\n[4] findCachedZip 扫描缓存目录');
 console.log('\n[5] resolveElectron / probeElectron 契约');
 {
   const home = join(workspace, 'home');
-  const runtimeDir = join(home, 'dsh-deskpet', 'electron');
+  const runtimeDir = join(home, 'dsh-cyberwhale', 'electron');
   await mkdir(runtimeDir, { recursive: true });
   await mkdir(dirname(join(runtimeDir, binaryRelativePath(process.platform))), { recursive: true });
   await writeFile(join(runtimeDir, binaryRelativePath(process.platform)), 'placeholder');
@@ -169,7 +169,7 @@ console.log('\n[6] 解包失败不破坏已有运行时（损坏包）');
 {
   const { extractElectronZip } = await import('../lib/electron-runtime.js');
   const home = join(workspace, 'home2');
-  const runtimeDir = join(home, 'dsh-deskpet', 'electron');
+  const runtimeDir = join(home, 'dsh-cyberwhale', 'electron');
   await mkdir(runtimeDir, { recursive: true });
   await mkdir(dirname(join(runtimeDir, binaryRelativePath(process.platform))), { recursive: true });
   await writeFile(join(runtimeDir, binaryRelativePath(process.platform)), 'placeholder');
@@ -185,7 +185,7 @@ console.log('\n[6] 解包失败不破坏已有运行时（损坏包）');
   }
   check('损坏包解包失败', failed, true);
   check('失败后目标目录原样保留', await stat(join(runtimeDir, 'KEEP-ME')).then(() => true, () => false), true);
-  const leftovers = (await readdir(join(home, 'dsh-deskpet'))).filter((n) => n.includes('.staging-'));
+  const leftovers = (await readdir(join(home, 'dsh-cyberwhale'))).filter((n) => n.includes('.staging-'));
   check('没有留下 staging 目录', leftovers.length, 0);
 }
 

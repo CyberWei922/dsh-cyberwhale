@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * dsh-deskpet · 客户端半插件（设置页）
+ * dsh-cyberwhale · 客户端半插件（设置页）
  *
  * 本文件是「源」形态的 CJS 模块体：`client/build.mjs` 会把它包进官方要求的
  * lazy-CJS 工厂外壳（`window.__ModuleLoader__.load({ id, factory(require) {…} })`），
@@ -23,11 +23,47 @@ const { Button, SegmentedControl, StateDot, Switch } = require('@deepseek-ai/dsh
 /** 注册到哪个 slot。整页用 `settings.section`；单条偏好才用 `settings.general.item`。 */
 const SLOT = 'settings.section';
 /** 分区 key（导航选中标识，也用于 `openSection(id)`）。 */
-const SECTION_ID = 'dsh-deskpet';
+const SECTION_ID = 'dsh-cyberwhale';
 /** 导航位置：官方现有分区为 账号 -10 / 通用 0 / 模型 10 / 插件 15 / Agent 预设 20，取 90 放最下方。 */
 const ORDER = 90;
 /** 运行状态轮询间隔（只在这一页被挂载时运行）。 */
 const POLL_MS = 3000;
+/**
+ * 准备运行时的轮询间隔。
+ *
+ * 下载进度是「每 250ms 一个数」的流；用 3 秒的常规间隔看就是一张张跳变的
+ * 快照，完全不像在下载。只在这段时间调密，其余时候保持低频。
+ */
+const FAST_POLL_MS = 800;
+
+/** 字节 → MB（保留一位小数，与官方进度文案一致）。 */
+function megabytes(bytes) {
+  return (Number(bytes) / 1048576).toFixed(1);
+}
+
+/**
+ * 把宿主的准备进度翻成一行中文文案。
+ *
+ * 文案在这里而不是宿主：宿主只报 `phase` 与字节数，显示怎么写是客户端的事。
+ * @param {{ phase?: string|null, received?: number, total?: number }|null} prepare
+ */
+function prepareText(prepare) {
+  const phase = prepare?.phase ?? null;
+  if (phase === 'checking') return '检查本机运行时…';
+  if (phase === 'cached') return '使用本机已有运行时…';
+  if (phase === 'downloading') {
+    const total = Number(prepare?.total) || 0;
+    const received = Number(prepare?.received) || 0;
+    // 服务端没给 content-length 时只能报已下多少，别显示一个假的分母。
+    return total > 0
+      ? `下载中 ${megabytes(received)} / ${megabytes(total)} MB`
+      : `下载中 ${megabytes(received)} MB`;
+  }
+  if (phase === 'verifying') return '校验中…';
+  if (phase === 'extracting') return '解包中…';
+  if (phase === 'ready') return '已就绪';
+  return '准备中…';
+}
 
 /**
  * 显示大小档位。
@@ -158,6 +194,12 @@ function WhalePetSection(props) {
     }
   }, [call]);
 
+  /**
+   * 准备任务是否在跑 —— 决定轮询用 800ms 还是 3000ms。
+   * 必须在 effect 之前算出来：它要进依赖数组，进依赖数组就会在渲染时求值。
+   */
+  const preparingRuntime = snapshot?.runtime?.prepare?.status === 'running';
+
   React.useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -165,12 +207,12 @@ function WhalePetSection(props) {
       await refresh();
     };
     void tick();
-    const timer = setInterval(() => void tick(), POLL_MS);
+    const timer = setInterval(() => void tick(), preparingRuntime ? FAST_POLL_MS : POLL_MS);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [refresh]);
+  }, [refresh, preparingRuntime]);
 
   const mutate = React.useCallback(
     async (key, endpoint, payload) => {
@@ -196,6 +238,37 @@ function WhalePetSection(props) {
     [call, refresh],
   );
 
+  /**
+   * 准备 / 取消运行时。
+   *
+   * 两个端点都是「立即返回当前快照、活儿在宿主后台干」，所以这里不等下载，
+   * 把返回的 prepare 合并进来就行 —— 后续进度交给轮询。
+   */
+  const runtimeAction = React.useCallback(
+    async (endpoint) => {
+      setPending('runtime');
+      try {
+        const value = await call(endpoint, {});
+        if (value !== null && typeof value === 'object' && value.prepare !== undefined) {
+          setSnapshot((previous) =>
+            previous === null
+              ? previous
+              : { ...previous, runtime: { ...(previous.runtime ?? {}), prepare: value.prepare } },
+          );
+        } else {
+          await refresh();
+        }
+        setError(null);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        await refresh();
+      } finally {
+        setPending(null);
+      }
+    },
+    [call, refresh],
+  );
+
   const settings = snapshot?.settings ?? null;
   const runtime = snapshot?.runtime ?? null;
 
@@ -203,6 +276,11 @@ function WhalePetSection(props) {
   const scale = settings?.scale ?? 1;
   const lookAtCursor = settings?.lookAtCursor ?? true;
   const bubbles = settings?.bubbles ?? true;
+
+  const prepare = runtime?.prepare ?? null;
+  const prepareFailed = prepare?.status === 'failed';
+  // 只在「本机确实缺运行时」或「正在处理这件事」时占用一行 —— 装好了就不再打扰。
+  const showRuntimeRow = runtime?.provisionable === true || (prepare !== null && prepare.status !== 'idle');
 
   /** 运行状态 → 官方 StateDot 的语义 + 文案。 */
   const status = (() => {
@@ -246,6 +324,61 @@ function WhalePetSection(props) {
       h('div', { className: 'dsh-whale-control' }, control),
     );
 
+  /**
+   * 「运行环境」行的右侧控件。
+   *
+   * 四个状态：失败 → 重试；进行中 → 进度文案 + 取消；已完成 → 状态点；其余 → 准备运行时。
+   */
+  const runtimeControl = (() => {
+    if (prepareFailed) {
+      return h(
+        Button,
+        {
+          variant: 'outline',
+          size: 'sm',
+          disabled: pending === 'runtime',
+          onClick: () => void runtimeAction('prepareRuntime'),
+        },
+        '重试',
+      );
+    }
+    if (preparingRuntime) {
+      return h(
+        'div',
+        { className: 'dsh-whale-actions' },
+        h('div', { className: 'dsh-whale-status' }, h('span', null, prepareText(prepare))),
+        h(
+          Button,
+          {
+            variant: 'outline',
+            size: 'sm',
+            disabled: pending === 'runtime',
+            onClick: () => void runtimeAction('cancelRuntime'),
+          },
+          '取消',
+        ),
+      );
+    }
+    if (prepare?.status === 'done') {
+      return h(
+        'div',
+        { className: 'dsh-whale-status' },
+        h(StateDot, { state: 'done' }),
+        h('span', null, '已就绪'),
+      );
+    }
+    return h(
+      Button,
+      {
+        variant: 'outline',
+        size: 'sm',
+        disabled: pending === 'runtime',
+        onClick: () => void runtimeAction('prepareRuntime'),
+      },
+      '准备运行时',
+    );
+  })();
+
   return h(
     'div',
     { className: 'dsh-whale-page' },
@@ -275,6 +408,16 @@ function WhalePetSection(props) {
       ),
       status.detail,
     ),
+
+    showRuntimeRow
+      ? row(
+          'runtime',
+          '运行环境',
+          '桌宠窗口需要 Electron 运行时（约 110 MB）。官方源不通时会自动改用国内镜像。',
+          runtimeControl,
+          prepareFailed ? prepare?.error ?? null : null,
+        )
+      : null,
 
     row(
       'scale',
@@ -378,7 +521,7 @@ const inject = ['slots', 'connection'];
 function apply(ctx) {
   ctx.effect(() => {
     const tag = document.createElement('style');
-    tag.dataset.plugin = 'dsh-deskpet';
+    tag.dataset.plugin = 'dsh-cyberwhale';
     tag.textContent = CSS;
     document.head.appendChild(tag);
     return () => tag.remove();

@@ -56,25 +56,27 @@ body {
   --bubble-ring: transparent;
 
   position: absolute;
-  /* left / top 由 JS 写入（见 pet.js 的 positionBubble）——
-     气泡要按屏幕边缘翻转和让位，不能写死在 CSS 里 */
+  /* 位置由 JS 用 transform 连续更新，翻转和让位共用同一段运动。 */
   left: 0;
   top: 0;
   translate: 0 0;
   transform-origin: 50% 100%;
+  /* 气泡宽度与透明窗口的绘图区解耦，扩大窗口不扩大气泡。 */
+  width: 323px;
   max-width: calc(100% - 12px);
   padding: 7px 12px 8px;
   border-radius: 14px;
   background: var(--bubble-bg);
   color: var(--bubble-fg);
   font: 500 12.5px/1.45 -apple-system, "PingFang SC", "SF Pro Text", system-ui, sans-serif;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   box-shadow: var(--bubble-shadow), inset 0 0 0 1px var(--bubble-ring);
   opacity: 0;
-  transition: opacity 0.18s ease, translate 0.18s ease;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  transition: opacity 0.18s ease;
   pointer-events: none;
 }
 
@@ -111,13 +113,6 @@ body {
 
 #bubble[data-visible='1'] {
   opacity: 1;
-  /* 默认气泡在头顶，出现时向上浮一点 */
-  translate: 0 -4px;
-}
-
-/* 角色贴屏幕顶边时气泡会翻到脚底，浮起方向跟着反过来 */
-#bubble[data-visible='1'][data-side='below'] {
-  translate: 0 4px;
 }
 
 /* 气泡的小尾巴 */
@@ -127,18 +122,22 @@ body {
   content: "";
   position: absolute;
   left: var(--bubble-tail-x, 50%);
-  bottom: -5px;
+  top: calc(100% - 4px);
   width: 9px;
   height: 9px;
   translate: -50% 0;
   border-radius: 50%;
   background: var(--bubble-bg);
+  transition: top 0.24s ease;
 }
 
 /* 气泡翻到脚底时，尾巴改到气泡上方，朝上指 */
 #bubble[data-side='below']::after {
-  bottom: auto;
   top: -5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bubble, #bubble::after { transition: none; }
 }
 
 @media (prefers-color-scheme: dark) {

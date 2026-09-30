@@ -1,5 +1,5 @@
 {
-  "name": "dsh-deskpet",
+  "name": "dsh-cyberwhale",
   "version": "0.1.0",
   "description": "一只常驻 macOS 桌面、随 DeepSeek Harness 状态变化的蓝色大肥鲸桌宠",
   "type": "module",
@@ -11,18 +11,32 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
+  "icon": "./assets/icon.png",
   "files": [
     "lib",
     "helper",
     "assets",
+    "locale",
     "tools",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CyberWei922/dsh-cyberwhale.git"
+  },
+  "homepage": "https://github.com/CyberWei922/dsh-cyberwhale#readme",
+  "bugs": {
+    "url": "https://github.com/CyberWei922/dsh-cyberwhale/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:client": "node client/build.mjs",
     "build:placeholder-atlas": "node tools/make-placeholder-atlas.mjs",
@@ -30,9 +44,11 @@
     "atlas:install": "node tools/install-atlas.mjs",
     "prepare:electron": "node tools/ensure-electron.mjs",
     "build": "node client/build.mjs",
-    "test": "node tools/test-host.mjs && node tools/test-client.mjs && node tools/test-atlas.mjs && node tools/test-activity.mjs && node tools/test-geometry.mjs && node tools/test-platform.mjs && node tools/test-regressions.mjs && node tools/test-orphans.mjs",
+    "prepublishOnly": "node client/build.mjs",
+    "test": "node tools/test-host.mjs && node tools/test-client.mjs && node tools/test-atlas.mjs && node tools/test-activity.mjs && node tools/test-geometry.mjs && node tools/test-platform.mjs && node tools/test-provision.mjs && node tools/test-regressions.mjs && node tools/test-orphans.mjs",
     "verify:bubble-placement": "node tools/verify-bubble-placement.mjs",
     "verify:bubble-render": "node tools/verify-bubble-render.mjs",
+    "verify:bubble-motion": "node tools/verify-bubble-motion.mjs",
     "verify:gaze": "node tools/verify-gaze.mjs",
     "test:platform": "node tools/test-platform.mjs"
   },
@@ -48,6 +64,22 @@
     "node": ">=22"
   },
   "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-connection": ">=0.2.0-rc.2 <1.0.0",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-rc.2 <1.0.0",
+    "@deepseek-ai/dsh-subprocess": ">=0.2.0-rc.2 <1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-subprocess": {
+      "optional": true
+    }
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

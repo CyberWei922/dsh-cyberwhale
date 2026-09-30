@@ -5,7 +5,8 @@
  * 这个脚本起真实的 Electron 窗口，喂几条气泡内容，用 `capturePage` 抓帧量像素，
  * 确认：
  *   · 气泡确实渲染出来了
- *   · 文本越长气泡越宽（说明内容真的进了 DOM，不是画了个空壳）
+ *   · 不同长度的文本使用相同的最大气泡宽度
+ *   · 超长标题和状态仍保持两行，不撑大气泡
  *   · 清空后气泡消失
  *   · 文字与背景的**对比度达标**，且**深浅两种外观下都达标**
  *
@@ -20,12 +21,12 @@ import { readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
+import { BUBBLE_WIDTH, computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
 import { decodePng } from './lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const metrics = computeMetrics(ENVELOPE_SCALE);
-const electron = `${process.env.HOME}/.dsh/dsh-deskpet/electron/Electron.app/Contents/MacOS/Electron`;
+const electron = `${process.env.HOME}/.dsh/dsh-cyberwhale/electron/Electron.app/Contents/MacOS/Electron`;
 const dir = '/tmp/bubble-shots';
 rmSync(dir, { recursive: true, force: true });
 mkdirSync(dir, { recursive: true });
@@ -56,7 +57,7 @@ function measure(file, yFrom, yTo) {
   const cx = Math.floor((minX + maxX) / 2), cy = Math.floor((minY + maxY) / 2);
   const i = (cy * img.width + cx) * 4;
   return {
-    count, width: maxX - minX + 1,
+    count, width: maxX - minX + 1, height: maxY - minY + 1,
     center: `rgb(${img.data[i]},${img.data[i+1]},${img.data[i+2]})`,
   };
 }
@@ -114,6 +115,7 @@ const shots = [
   { name: 'long', status: '正在运行命令 · npm test' },
   // 两行：第一行会话标题，第二行状态
   { name: 'two', title: '重制任务书', status: '正在运行命令 · npm test' },
+  { name: 'overflow', title: '这是一个超过气泡可用宽度的会话标题，需要在右侧显示省略号', status: '正在运行命令 · npm test，这是一个超过气泡可用宽度的任务状态，需要在右侧显示省略号' },
   { name: 'empty', status: '' },
 ];
 for (const shot of shots) {
@@ -135,6 +137,8 @@ for (const shot of shots) {
 }
 const shortM = measure(`${dir}/short.png`, ...BAND);
 const longM = measure(`${dir}/long.png`, ...BAND);
+const twoM = measure(`${dir}/two.png`, ...BAND);
+const overflowM = measure(`${dir}/overflow.png`, ...BAND);
 const emptyM = measure(`${dir}/empty.png`, ...BAND);
 console.log();
 
@@ -148,7 +152,7 @@ for (const scheme of ['light', 'dark']) {
   // 实时层
   for (const shot of shots.slice(0, 2)) {
     send({ t: 'bubble', title: shot.title ?? '', status: shot.status });
-    await sleep(300);
+    await sleep(600); // 等气泡淡入完成，再量实心区域的对比度
     const file = `${dir}/${scheme}-${shot.name}.png`;
     send({ t: 'capture', path: file });
     await sleep(700);
@@ -199,7 +203,8 @@ console.log();
 const checks = [
   ...contrastChecks,
   ['实时气泡有内容', shortM.count > 500],
-  ['更长的文本 → 更宽的气泡', longM.width > shortM.width],
+  ['短文本与长文本保持相同的最大气泡宽度', longM.width === shortM.width && shortM.width >= BUBBLE_WIDTH * 2],
+  ['超长标题和状态不撑大气泡', overflowM.width === twoM.width && overflowM.height === twoM.height && overflowM.count > 500],
   ['清空后气泡消失（或回落到碎碎念）', emptyM.count !== shortM.count || emptyM.width !== shortM.width],
   // capturePage 会做色彩空间转换，绝对值对不上；判"更接近哪一档"才稳定。
   ['实时层用的是实时配色（而非碎碎念配色）', (() => {

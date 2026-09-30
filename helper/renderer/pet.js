@@ -29,6 +29,7 @@ const COLS = 8;
 const ROWS = 11;
 const MARGIN = 14;
 const BUBBLE_SPACE = 74;
+const BUBBLE_WIDTH = 323;
 
 /**
  * Windows 上点击穿透与光标位置由主进程按全局光标判定（见 helper/main.js 的
@@ -280,9 +281,41 @@ const BUBBLE_GAP = 8;
 const BUBBLE_EDGE = 6;
 /** 尾巴离气泡两端的最近距离，别让它指到气泡外面。 */
 const BUBBLE_TAIL_INSET = 18;
+/** 回到头顶多留一点空间，避免贴着阈值时反复翻转。 */
+const BUBBLE_FLIP_HYSTERESIS = 16;
+/** 临界阻尼弹簧：保留运动速度，约 300ms 收敛，不向屏幕外回弹。 */
+const BUBBLE_SPRING_FREQUENCY = 24;
+const reducedBubbleMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
 let bubbleFrameCache = null;
 let bubbleSizeCache = null;
+let bubbleMotion = null;
+let bubbleWidthCache = null;
+let bubbleTransformCache = null;
+let bubbleBounds = null;
+
+/** 解析积分临界阻尼弹簧；帧率变化或中途反向时也保持连续的位置和速度。 */
+function stepBubbleAxis(axis, target, dt) {
+  const seconds = Math.max(0, dt) / 1000;
+  const frequency = BUBBLE_SPRING_FREQUENCY;
+  const displacement = axis.value - target;
+  const impulse = axis.velocity + frequency * displacement;
+  const decay = Math.exp(-frequency * seconds);
+  axis.value = target + (displacement + impulse * seconds) * decay;
+  axis.velocity = (axis.velocity - frequency * impulse * seconds) * decay;
+  if (Math.abs(axis.value - target) < 0.01 && Math.abs(axis.velocity) < 0.1) {
+    axis.value = target;
+    axis.velocity = 0;
+  }
+}
+
+function confineBubbleAxis(axis, min, max) {
+  const next = Math.min(Math.max(axis.value, min), max);
+  if (next !== axis.value) {
+    axis.value = next;
+    axis.velocity = 0;
+  }
+}
 
 /** 量气泡尺寸。文本变了才重量 —— 每帧读 offsetWidth 会触发布局抖动。 */
 function measureBubble() {
@@ -302,14 +335,22 @@ function measureBubble() {
  * 窗口是按最大档位预留的，上下各留了一块气泡空间（见 helper/geometry.js），
  * 所以翻到下方有地方去。屏幕可视区由主进程下发（窗口本身可以伸到屏幕外）。
  */
-function positionBubble() {
+function positionBubble(dt = 16) {
   const rect = petRect();
   const layout = state.layout;
-  // 还没收到 layout 时退化成窗口自身，至少不会跑出窗口
-  const viewLeft = layout === null ? 0 : layout.left;
-  const viewTop = layout === null ? 0 : layout.top;
-  const viewRight = layout === null ? window.innerWidth : layout.right;
-  const viewBottom = layout === null ? window.innerHeight : layout.bottom;
+  // 屏幕和原生窗口的交集才是真正能显示的区域；不能只保证不出屏幕。
+  const viewLeft = Math.max(0, layout?.left ?? 0);
+  const viewTop = Math.max(0, layout?.top ?? 0);
+  const viewRight = Math.min(window.innerWidth, layout?.right ?? window.innerWidth);
+  const viewBottom = Math.min(window.innerHeight, layout?.bottom ?? window.innerHeight);
+
+  // 通常恒定为 323px；只在整个可视区比气泡还窄时兜底收窄。
+  const width = Math.min(layout?.bubbleWidth ?? BUBBLE_WIDTH, Math.max(0, viewRight - viewLeft - BUBBLE_EDGE * 2));
+  if (width !== bubbleWidthCache) {
+    bubbleWidthCache = width;
+    bubble.style.width = `${width}px`;
+    bubbleSizeCache = null;
+  }
 
   const size = measureBubble();
 
@@ -319,9 +360,11 @@ function positionBubble() {
   const aboveFits = aboveTop >= viewTop + BUBBLE_EDGE;
   const belowFits = belowTop + size.height <= viewBottom - BUBBLE_EDGE;
 
+  const returningAbove = bubbleFrameCache?.side === 'below';
+  const aboveReady = aboveFits && (!returningAbove || aboveTop >= viewTop + BUBBLE_EDGE + BUBBLE_FLIP_HYSTERESIS);
   let side = 'above';
   let top = aboveTop;
-  if (!aboveFits && belowFits) {
+  if (!aboveReady && belowFits) {
     side = 'below';
     top = belowTop;
   } else if (!aboveFits && !belowFits) {
@@ -333,33 +376,37 @@ function positionBubble() {
       top = belowTop;
     }
   }
-  top = Math.min(Math.max(top, viewTop + BUBBLE_EDGE), viewBottom - BUBBLE_EDGE - size.height);
+  const minTop = viewTop + BUBBLE_EDGE;
+  const maxTop = Math.max(minTop, viewBottom - BUBBLE_EDGE - size.height);
+  top = Math.min(Math.max(top, minTop), maxTop);
 
   // ── 水平：以宠物中轴为中心，再夹进可视区 ────────────────────────────
   const petCenter = rect.petLeft + rect.petWidth / 2;
   let left = petCenter - size.width / 2;
-  left = Math.min(Math.max(left, viewLeft + BUBBLE_EDGE), viewRight - BUBBLE_EDGE - size.width);
+  const minLeft = viewLeft + BUBBLE_EDGE;
+  const maxLeft = Math.max(minLeft, viewRight - BUBBLE_EDGE - size.width);
+  left = Math.min(Math.max(left, minLeft), maxLeft);
+  bubbleFrameCache = { top, left, side };
+  bubbleBounds = { minLeft, maxLeft, minTop, maxTop };
 
-  // 尾巴指向宠物中轴，但夹在气泡内部
-  const tailX = Math.min(Math.max(petCenter - left, BUBBLE_TAIL_INSET), size.width - BUBBLE_TAIL_INSET);
-
-  const frame = { top: Math.round(top), left: Math.round(left), side, tailX: Math.round(tailX) };
-  const cached = bubbleFrameCache;
-  if (
-    cached !== null &&
-    cached.top === frame.top &&
-    cached.left === frame.left &&
-    cached.side === frame.side &&
-    cached.tailX === frame.tailX
-  ) {
-    return;
+  if (bubbleMotion === null || bubble.dataset.visible !== '1' || reducedBubbleMotion?.matches) {
+    bubbleMotion = { x: { value: left, velocity: 0 }, y: { value: top, velocity: 0 } };
+  } else {
+    stepBubbleAxis(bubbleMotion.x, left, dt);
+    stepBubbleAxis(bubbleMotion.y, top, dt);
   }
 
-  bubbleFrameCache = frame;
-  bubble.style.top = `${frame.top}px`;
-  bubble.style.left = `${frame.left}px`;
-  bubble.dataset.side = frame.side;
-  bubble.style.setProperty('--bubble-tail-x', `${frame.tailX}px`);
+  // 动画的每一帧也要留在交集内，快速拖动及翻转中不能暂时越界。
+  confineBubbleAxis(bubbleMotion.x, minLeft, maxLeft);
+  confineBubbleAxis(bubbleMotion.y, minTop, maxTop);
+  const transform = `translate3d(${bubbleMotion.x.value.toFixed(3)}px, ${bubbleMotion.y.value.toFixed(3)}px, 0)`;
+  if (transform !== bubbleTransformCache) {
+    bubbleTransformCache = transform;
+    bubble.style.transform = transform;
+  }
+  bubble.dataset.side = side;
+  const tailX = Math.min(Math.max(petCenter - bubbleMotion.x.value, BUBBLE_TAIL_INSET), size.width - BUBBLE_TAIL_INSET);
+  bubble.style.setProperty('--bubble-tail-x', `${tailX.toFixed(3)}px`);
 }
 
 /** 命中矩形（已按 alpha 包围盒内缩）。 */
@@ -577,8 +624,8 @@ function frame(now) {
     bubble.dataset.visible = '0';
   }
   draw(now);
-  positionBubble();
   updateBubble(now);
+  positionBubble(dt);
   requestAnimationFrame(frame);
 }
 
@@ -679,6 +726,9 @@ host.onProbe(() => {
     bubble: rectOf(bubble),
     bubbleSide: bubble.dataset.side ?? null,
     bubbleVisible: bubble.dataset.visible ?? null,
+    bubbleTarget: bubbleFrameCache,
+    bubbleBounds,
+    bubbleOpacity: Number(getComputedStyle(bubble).opacity),
     pet: rectOf(canvas),
     window: { width: window.innerWidth, height: window.innerHeight },
     // 注视相关的状态，真机验证靠它判断规则有没有生效
@@ -693,8 +743,8 @@ host.onProbe(() => {
 host.onLayout((value) => {
   if (value === null || typeof value !== 'object') return;
   state.layout = value;
-  bubbleFrameCache = null; // 屏幕位置变了，重新摆一次
   syncCanvas();            // 宠物底边可能变了，画布要跟着挪
+  positionBubble(0);        // 先约束到新可视区，后续 rAF 继续推进弹簧动画
 });
 
 host.onBubble((payload) => {

@@ -220,7 +220,7 @@ vm.runInContext(source, sandbox, { filename: 'client.js' });
 
 check('调用了 __ModuleLoader__.load 一次', registrations.length, 1);
 const entry = registrations[0];
-check('登记的 id 是包名', entry?.id, 'dsh-deskpet');
+check('登记的 id 是包名', entry?.id, 'dsh-cyberwhale');
 check('提供了 factory', typeof entry?.factory, 'function');
 check('没有多余的 chunk 字段', entry?.chunk, undefined);
 
@@ -270,13 +270,13 @@ plugin.apply(ctx);
 check('注入的 slot 是 settings.section', slotRegistrations[0], 'settings.section');
 const registration = slotRegistrations[1];
 check('注册的 slot 名正确', registration?.options?.name, 'settings.section');
-check('注册的 id 正确', registration?.options?.id, 'dsh-deskpet');
+check('注册的 id 正确', registration?.options?.id, 'dsh-cyberwhale');
 check('order 在最下方', registration?.options?.order, 90);
 check('label 是函数（可跟随语言）', typeof registration?.options?.label, 'function');
 check('label 返回分区名', registration?.options?.label(), '桌宠');
 check('注册传入了组件', typeof registration?.component, 'function');
 check('注入了样式标签', styleTags.length, styleBefore + 1);
-check('样式标签带插件标记', styleTags.at(-1)?.dataset?.plugin, 'dsh-deskpet');
+check('样式标签带插件标记', styleTags.at(-1)?.dataset?.plugin, 'dsh-cyberwhale');
 
 console.log('\n[4] 组件可渲染（不抛错）');
 // 注册的是一个包装组件，内部才渲染真正的卡片；我们的 React mock 不解析函数
@@ -410,6 +410,158 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
   check('没有多余的 getState 往返', seen.filter((c) => c.endpoint === 'getState').length, 1);
 
   runtime.dispose();
+}
+
+console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
+{
+  const IDLE_PREPARE = {
+    status: 'idle',
+    phase: null,
+    received: 0,
+    total: 0,
+    source: null,
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+  };
+  const snapshotFor = (runtime) => ({
+    settings: { enabled: true, scale: 1.0, lookAtCursor: true, bubbles: true, position: null, rememberPosition: true },
+    limits: { scale: { min: 0.5, max: 1.6, step: 0.05 } },
+    runtime: { running: false, ready: false, pid: null, error: null, lastExit: null, provisionable: false, prepare: IDLE_PREPARE, ...runtime },
+    animation: 'idle',
+  });
+
+  /**
+   * 收集**原始**元素节点（保留子节点）。
+   *
+   * 为什么不用上面的 expand：基元替身只接受 props、会把子节点丢掉，而这一节要断言的
+   * 恰恰是按钮文案与进度文案。
+   */
+  const rawNodes = (node, out = []) => {
+    if (node === null || node === undefined || typeof node !== 'object') return out;
+    if (Array.isArray(node)) {
+      for (const child of node) rawNodes(child, out);
+      return out;
+    }
+    out.push(node);
+    for (const child of node.children ?? []) rawNodes(child, out);
+    return out;
+  };
+
+  const renderWith = async (runtime) => {
+    const calls = [];
+    const ctxDriven = {
+      logger: { warn() {}, info() {} },
+      effect: (fn) => fn(),
+      slots: {
+        inject: (_slot, callback) => {
+          callback();
+          return () => {};
+        },
+        register: (options, component) => {
+          ctxDriven._registered = { options, component };
+          return () => {};
+        },
+      },
+      connection: {
+        rpc: {
+          call: (_channel, endpoint, payload) => {
+            calls.push({ endpoint, payload });
+            if (endpoint === 'getState') return Promise.resolve({ ok: true, value: snapshotFor(runtime) });
+            // 准备/取消都是「立即返回当前快照」，宿主后台继续跑。
+            return Promise.resolve({
+              ok: true,
+              value: { prepare: { ...IDLE_PREPARE, ...(runtime.prepare ?? {}), status: 'running', phase: 'checking' } },
+            });
+          },
+        },
+      },
+    };
+    plugin.apply(ctxDriven);
+    const element = ctxDriven._registered.component();
+    const hookRuntime = createHookRuntime(element.type, element.props);
+    let tree = hookRuntime.render();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    tree = hookRuntime.render();
+    const nodes = rawNodes(tree);
+    return { calls, nodes, dispose: () => hookRuntime.dispose() };
+  };
+
+  const buttonsOf = (nodes) => nodes.filter((node) => node.type === primitivesMock.Button);
+  const labelOf = (node) => (node.children ?? [])[0];
+
+  // 本机没有运行时 → 出现引导行
+  const missing = await renderWith({ provisionable: true });
+  const missingText = JSON.stringify(missing.nodes);
+  check('缺运行时时出现「运行环境」行', missingText.includes('运行环境'), true);
+  check('文案说明需要约 110 MB', missingText.includes('110 MB'), true);
+  check('文案说明会自动改用国内镜像', missingText.includes('国内镜像'), true);
+  const prepareButton = buttonsOf(missing.nodes).find((node) => labelOf(node) === '准备运行时');
+  check('空闲时给的是「准备运行时」按钮', prepareButton !== undefined, true);
+  prepareButton?.props?.onClick?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check('点击后调用 prepareRuntime', missing.calls.at(-1)?.endpoint, 'prepareRuntime');
+  missing.dispose();
+
+  // 运行时可用且没有在准备 → 不占用一行
+  const fine = await renderWith({ provisionable: false });
+  check('运行时可用的页面不显示这一行', JSON.stringify(fine.nodes).includes('运行环境'), false);
+  fine.dispose();
+
+  // 准备中 → 进度文案 + 取消
+  const running = await renderWith({
+    provisionable: true,
+    prepare: {
+      ...IDLE_PREPARE,
+      status: 'running',
+      phase: 'downloading',
+      received: Math.round(12.3 * 1048576),
+      total: Math.round(108.5 * 1048576),
+      source: 'mirror',
+    },
+  });
+  check('下载中显示「下载中 12.3 / 108.5 MB」', JSON.stringify(running.nodes).includes('下载中 12.3 / 108.5 MB'), true);
+  const cancelButton = buttonsOf(running.nodes).find((node) => labelOf(node) === '取消');
+  check('下载中给的是「取消」按钮', cancelButton !== undefined, true);
+  cancelButton?.props?.onClick?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  check('点击取消调用 cancelRuntime', running.calls.at(-1)?.endpoint, 'cancelRuntime');
+  running.dispose();
+
+  // 各阶段文案
+  const phaseText = async (phase, extra) => {
+    const view = await renderWith({ provisionable: true, prepare: { ...IDLE_PREPARE, status: 'running', phase, ...extra } });
+    const text = JSON.stringify(view.nodes);
+    view.dispose();
+    return text;
+  };
+  check('checking 文案', (await phaseText('checking')).includes('检查本机运行时…'), true);
+  check('cached 文案', (await phaseText('cached')).includes('使用本机已有运行时…'), true);
+  check('verifying 文案', (await phaseText('verifying')).includes('校验中…'), true);
+  check('extracting 文案', (await phaseText('extracting')).includes('解包中…'), true);
+  check(
+    '没有 content-length 时只报已下载量',
+    (await phaseText('downloading', { received: Math.round(3 * 1048576), total: 0 })).includes('下载中 3.0 MB'),
+    true,
+  );
+
+  // 失败 → 错误原文 + 重试
+  const failed = await renderWith({
+    provisionable: true,
+    prepare: { ...IDLE_PREPARE, status: 'failed', error: '官方源与镜像都不可达' },
+  });
+  const failedText = JSON.stringify(failed.nodes);
+  check('失败时显示错误原文', failedText.includes('官方源与镜像都不可达'), true);
+  check('失败时按钮变成「重试」', buttonsOf(failed.nodes).some((node) => labelOf(node) === '重试'), true);
+  failed.dispose();
+
+  // 已完成 → 就绪状态点
+  const doneView = await renderWith({ provisionable: false, prepare: { ...IDLE_PREPARE, status: 'done', phase: 'ready' } });
+  const doneText = JSON.stringify(doneView.nodes);
+  check('已就绪时显示「已就绪」', doneText.includes('已就绪'), true);
+  // 原始节点里 type 是函数，JSON 会丢掉它，所以按引用判断基元。
+  check('已就绪时用了官方状态点', doneView.nodes.some((node) => node.type === primitivesMock.StateDot), true);
+  doneView.dispose();
 }
 
 console.log('\n[5] 组件内部的 RPC 调用');

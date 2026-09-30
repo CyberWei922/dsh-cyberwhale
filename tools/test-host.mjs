@@ -24,7 +24,7 @@ if (process.env.DSH_DESKPET_ELECTRON === undefined || process.env.DSH_DESKPET_EL
   const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
   const candidates = isWin
     ? []
-    : [`${process.env.HOME}/.dsh/dsh-deskpet/electron/Electron.app`, `${process.env.HOME}/Projects/LocalVideo/node_modules/electron/dist/Electron.app`];
+    : [`${process.env.HOME}/.dsh/dsh-cyberwhale/electron/Electron.app`, `${process.env.HOME}/Projects/LocalVideo/node_modules/electron/dist/Electron.app`];
   const found = candidates.find((candidate) => existsSync(candidate));
   if (found !== undefined) {
     process.env.DSH_DESKPET_ELECTRON = found;
@@ -384,7 +384,7 @@ console.log('\n[5c] 孤儿进程清扫');
   const isWin = process.platform === 'win32';
   // 用绝对路径当标记：Windows 的 CIM 查询按可执行文件名筛，且命令行里必须出现它。
   const fakeHome = await mkdtemp(join(tmpdir(), 'deskpet-orphan-'));
-  const marker = join(fakeHome, 'dsh-deskpet-orphan-marker');
+  const marker = join(fakeHome, 'dsh-cyberwhale-orphan-marker');
   await writeFile(marker, 'marker');
 
   // 起一个「看起来像 Electron 助手」的进程。
@@ -421,6 +421,39 @@ console.log('\n[5c] 孤儿进程清扫');
 
   // 不该误伤自己
   check('没有把当前进程算进去', (await findMatchingProcesses(process.argv[1] ?? 'x')).includes(process.pid), false);
+}
+
+console.log('\n[5d] 运行环境：getState 新字段与准备端点');
+{
+  const idle = await rpc('getState');
+  check('getState 带 runtime.provisionable', typeof idle.value.runtime.provisionable, 'boolean');
+  // 本测试显式指定了可用的 DSH_DESKPET_ELECTRON，所以不是「缺运行时」。
+  check('运行时可用的前提下 provisionable=false', idle.value.runtime.provisionable, false);
+  check('getState 带 runtime.prepare.status', idle.value.runtime.prepare.status, 'idle');
+  check(
+    'prepare 的字段齐全（设置页按它渲染进度）',
+    Object.keys(idle.value.runtime.prepare).sort(),
+    ['error', 'finishedAt', 'phase', 'received', 'source', 'startedAt', 'status', 'total'],
+  );
+
+  const beforeSpawns = spawnedHandles.length;
+  const started = await rpc('prepareRuntime', {});
+  check('prepareRuntime 返回 ok', started.ok, true);
+  // 端点必须【立即】返回：下载要几分钟，若等它完成，设置页就没法显示进度了。
+  check('prepareRuntime 立即返回 running', started.value.prepare.status, 'running');
+  check('prepareRuntime 立即返回 phase=checking', started.value.prepare.phase, 'checking');
+
+  await sleep(400);
+  const after = (await rpc('getState')).value.runtime;
+  check('本机已有运行时时准备立即完成', after.prepare.status, 'done');
+  check('完成后 phase 是 ready', after.prepare.phase, 'ready');
+  check('完成后清掉错误', after.prepare.error, null);
+  // 成功后要自动把「缺运行时没起来」的窗口拉起来，用户不必重启 DSH。
+  check('准备完成后桌宠窗口被重新拉起', spawnedHandles.length > beforeSpawns, true);
+
+  const cancelled = await rpc('cancelRuntime');
+  check('任务已结束时 cancelRuntime 仍返回 ok', cancelled.ok, true);
+  check('取消不会把已完成的状态改回 idle', cancelled.value.prepare.status, 'done');
 }
 
 console.log('\n[6] user-questions waterfall 必须放行 next()');

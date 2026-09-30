@@ -1,6 +1,6 @@
 # Windows 11 x64 适配实现说明
 
-> 本文件记录 dsh-deskpet 在 Windows 上的适配：官方 Harness 依据、每一处改动的位置与动机、
+> 本文件记录 dsh-cyberwhale 在 Windows 上的适配：官方 Harness 依据、每一处改动的位置与动机、
 > 真机验证证据，以及**明确未验证**的部分。
 >
 > **状态**：Windows 适配已通过 PR #1 合入 `main`。本文保留 Windows 分支的实现与验证记录；合并时 macOS 的注视、气泡布局和渲染验证已通过。
@@ -158,13 +158,13 @@ macOS 继续用 stdin，一行没动。
 ### 4.5 真实 Desktop 端到端
 
 - 官方 CLI 安装：`dsh.cmd plugin --profile desktop add <仓库路径>` → profile 写入
-  `link:` 依赖 + `dsh.profile.bundles` 追加 `dsh-deskpet` + node_modules Junction ✓
-- 启动后运行时**自动从 `%LOCALAPPDATA%\electron\Cache` 解出**到 `$DSH_HOME/dsh-deskpet/electron/` ✓
+  `link:` 依赖 + `dsh.profile.bundles` 追加 `dsh-cyberwhale` + node_modules Junction ✓
+- 启动后运行时**自动从 `%LOCALAPPDATA%\electron\Cache` 解出**到 `$DSH_HOME/dsh-cyberwhale/electron/` ✓
 - 进程链：`DeepSeek Harness.exe`(shell) → `dsh-desktop-host`(Host) → `dsh-subprocess-local/lib/runner.js`
   → `electron.exe <repo>\helper`（+ gpu/utility/renderer 子进程）✓
 - 窗口可见、置顶、默认穿透；真机网格扫描证明**命中区内会切成可交互**（`.`→`#`）✓
 - 设置页缩放热生效、拖动位置被写入 `settings.json`、**重启后按记忆位置恢复** ✓
-- 关闭清理（最严苛场景）：强杀 shell 主进程后 **3 秒内 4 个 dsh-deskpet 进程全部退出**，
+- 关闭清理（最严苛场景）：强杀 shell 主进程后 **3 秒内 4 个桌宠助手进程全部退出**，
   无 `DeepSeek Harness.exe`（Host/runner）残留 ✓
 
 ### 4.6 测试
