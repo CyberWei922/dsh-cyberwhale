@@ -43,7 +43,7 @@ node tools\ensure-electron.mjs --force               # 强制重下（会替换�
 ```
 
 - 解包用 **Windows 自带 `tar.exe`**（Win10 1803+；失败自动退到 PowerShell `Expand-Archive`）。
-- 下载后用官方 `SHASUMS256.txt` 校验 SHA-256；解包走 staging + 原子替换，
+- 下载后用官方 `SHASUMS256.txt` 校验 SHA-256；解包先完成 staging，再替换；安装失败时回滚，
   **解包失败不会破坏已有可用运行时**。
 - 直连 GitHub 慢或被拦时换源：
   ```powershell
