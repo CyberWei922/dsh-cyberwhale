@@ -106,6 +106,10 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
+**当前状态：v0.1.0 已双端发布** —— <https://www.npmjs.com/package/dsh-cyberwhale> 与
+<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.0>（带 provenance 证明）。
+两条通道都实测可用：从 npm 按包名安装、从 Release 的 `.tgz` 安装都能装进 profile 并正常组合。
+
 > **命名历史**（新用户不用管）：最初叫 `dsh-deskpet`，但那个 npm 包名属于 `trk23` 的另一个
 > DSH 桌宠插件（<https://github.com/udbwhdjwbdj/dsh-deskpet>，v0.1.1，**151 次/月下载**），
 > 无法发布；更麻烦的是只要包名还叫那个名字，任何人在插件页输入它，装到的都是**别人那个插件**。

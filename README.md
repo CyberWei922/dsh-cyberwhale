@@ -18,15 +18,17 @@
 
 **1. 在 Harness 里安装插件**
 
-侧栏 → **插件** → **添加插件**，把仓库地址粘贴进输入框：
+侧栏 → **插件** → **添加插件**，下面三选一填进输入框：
 
-```
-https://github.com/CyberWei922/dsh-cyberwhale
-```
+| 填什么 | 内容 |
+|---|---|
+| npm 包名（最省事） | `dsh-cyberwhale` |
+| 仓库地址 | `https://github.com/CyberWei922/dsh-cyberwhale` |
+| 压缩包 | [Releases](https://github.com/CyberWei922/dsh-cyberwhale/releases) 里 `.tgz` 的直链或本地路径 |
 
-点**安装**，装完点**立即启用**。安装源保持默认即可。发布到 npm 之后，这里也可以直接填包名 `dsh-cyberwhale`。
+点**安装**，装完点**立即启用**。安装源保持默认即可。
 
-装不上的话有两条备选：到 [Releases](https://github.com/CyberWei922/dsh-cyberwhale/releases) 下载 `.tgz`，把下载直链或本地文件路径粘进同一个输入框；或者改成命令行从本地目录安装（见下方折叠块）。
+`git` 不可用或访问不了 GitHub 时用 npm 包名；npm 也不方便时（比如纯粹离线），到 Releases 下 `.tgz` 再粘本地路径。都装不上就改用命令行从本地目录安装，见下方折叠块。
 
 **2. 准备运行环境**
 
