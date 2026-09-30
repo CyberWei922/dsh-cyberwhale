@@ -66,7 +66,7 @@ export const ROW_SPECS = [
   { row: 4, name: 'jumping', expected: 5, aliases: ['jumping', 'jump', '跳跃', '跳'] },
   { row: 5, name: 'failed', expected: 8, aliases: ['failed', 'fail', 'error', 'sad', '出错', '失败', '沮丧'] },
   { row: 6, name: 'waiting', expected: 6, aliases: ['waiting', 'wait', '等待', '等你确认'] },
-  { row: 7, name: 'running', expected: 6, aliases: ['running', 'working', 'work', '干活', '思考'] },
+  { row: 7, name: 'running', expected: 4, aliases: ['running', 'working', 'work', '干活', '思考'] },
   { row: 8, name: 'review', expected: 6, aliases: ['review', '检查', '检查结果'] },
   { row: 9, name: 'look-a', expected: 8, aliases: ['look-a', 'looka', 'direction-a', 'look-up', 'gaze-a', 'gazea', '注视a', '注视上'] },
   { row: 10, name: 'look-b', expected: 8, aliases: ['look-b', 'lookb', 'direction-b', 'look-down', 'gaze-b', 'gazeb', '注视b', '注视下'] },

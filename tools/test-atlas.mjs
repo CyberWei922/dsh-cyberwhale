@@ -557,7 +557,8 @@ try {
 
     // 这一条是被实际踩过的坑：文档里手写总数，写错成 68（实际 73）。
     // 让文档和规格对不上时直接测试失败。
-    check('总帧数为 73', total, 73);
+    // 71 = 73 - 2：干活中从 6 帧改成了 4 帧「端碗扒饭」。
+    check('总帧数为 71', total, 71);
     const plan = await readFile(new URL('../docs/pet-atlas-repair-plan.md', import.meta.url), 'utf8');
     const stated = /共 11 个动作、(\d+) 帧/.exec(plan);
     check('返工方案里写的总帧数与规格一致', Number(stated?.[1]), total);

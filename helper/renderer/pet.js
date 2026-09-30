@@ -48,7 +48,9 @@ const ANIMATIONS = {
   jumping: rowAnimation(4, 5, 140, 280),
   failed: rowAnimation(5, 8, 140, 240),
   waiting: rowAnimation(6, 6, 150, 260),
-  running: rowAnimation(7, 6, 120, 220),
+  // 4 帧（原 6 帧）：端碗扒饭。单帧 200ms、收尾 400ms —— 比原来的
+  // 120/220 慢一些，扒饭的节奏看着不慌。
+  running: rowAnimation(7, 4, 200, 400),
   review: rowAnimation(8, 6, 150, 280),
 };
 
@@ -86,6 +88,7 @@ const ctx = canvas.getContext('2d');
 // ── 运行时状态 ─────────────────────────────────────────────────────────────
 const state = {
   animation: 'idle',
+  hostAnimation: 'idle',
   animationStartedAt: performance.now(),
   spritesheet: null,
   manifest: null,
@@ -125,6 +128,11 @@ async function loadAssets() {
     const blob = new Blob([new Uint8Array(payload.bytes)], { type: payload.mime ?? 'image/webp' });
     const bitmap = await createImageBitmap(blob);
 
+    if (bitmap.width !== COLS * CELL.width || ![9, ROWS].includes(bitmap.height / CELL.height)) {
+      bitmap.close();
+      throw new Error('图集尺寸必须为 1536×2288（或兼容的 1536×1872）');
+    }
+    state.spritesheet?.close?.();
     state.spritesheet = bitmap;
     state.manifest = payload.manifest ?? null;
     state.hitInset = computeAlphaInset(bitmap);
@@ -385,6 +393,7 @@ function currentLookFrame(now) {
   }
 
   if (!state.lookAtCursor || state.dragging) return null;
+  if (state.spritesheet !== null && state.spritesheet.height < ROWS * CELL.height) return null;
   if (state.animation !== 'idle') return null; // 规则 1：只有待机才注视
   if (!over) return null;                      // 规则 2：鼠标必须在身上
   if (now - state.cursorEnteredAt > LOOK_HOLD_MS) return null; // 规则 3：最多 10 秒
@@ -447,16 +456,8 @@ function draw(now) {
 }
 
 // ── 气泡 ──────────────────────────────────────────────────────────────────
-/**
- * 实时层的兜底保留时长。
- *
- * 正常情况下宿主在 `turn/end` 时会明确清空，所以这个只用于「上游异常消失」
- * （宿主进程挂了之类）时别让气泡永远停在旧状态上。
- *
- * 必须给得很宽松：一条命令跑十分钟是常事，用十几秒的话会在任务进行中
- * 莫名其妙回落到碎碎念 —— 那比一直显示旧状态还糟。
- */
-const LIVE_HOLD_MS = 10 * 60 * 1000;
+// 由宿主明确清空；长任务不能因为没有新事件而被误判结束。
+const LIVE_HOLD_MS = Number.POSITIVE_INFINITY;
 
 let bubbleLinesKey = null;
 
@@ -608,7 +609,9 @@ window.addEventListener('mouseup', (event) => {
   if (event.button !== 0 || !state.dragging) return;
   state.dragging = false;
   state.dragDirection = null;
+  syncAnimation();
   host.dragEnd();
+  if (state.cursor !== null) updateInteractivity(state.cursor);
 });
 
 window.addEventListener('contextmenu', (event) => {
@@ -621,11 +624,19 @@ window.addEventListener('contextmenu', (event) => {
 // 把位图重建和重画拆到两帧。
 
 // ── 与主进程的通路 ────────────────────────────────────────────────────────
-host.onState((animation) => {
-  if (typeof animation !== 'string' || animation === state.animation) return;
+function syncAnimation() {
+  const animation = state.dragDirection === 'left' ? 'running-left'
+    : state.dragDirection === 'right' ? 'running-right' : state.hostAnimation;
+  if (animation === state.animation) return;
   state.animation = animation;
   state.animationStartedAt = performance.now();
   announceTransient(animation);
+}
+
+host.onState((animation) => {
+  if (typeof animation !== 'string' || !(animation in ANIMATIONS)) return;
+  state.hostAnimation = animation;
+  syncAnimation();
 });
 
 host.onProbe(() => {
@@ -683,11 +694,8 @@ host.onConfig((config) => {
 });
 
 host.onDragDirection((direction) => {
-  state.dragDirection = direction;
-  if (direction === 'left' || direction === 'right') {
-    state.animation = direction === 'left' ? 'running-left' : 'running-right';
-    state.animationStartedAt = performance.now();
-  }
+  state.dragDirection = direction === 'left' || direction === 'right' ? direction : null;
+  syncAnimation();
 });
 
 host.onReload(() => {
