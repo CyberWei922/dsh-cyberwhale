@@ -80,7 +80,6 @@ function createHookRuntime(component, props) {
   let slots = [];
   let cursor = 0;
   let rerenderRequested = false;
-  const cleanups = [];
 
   function sameDeps(a, b) {
     if (a === undefined || b === undefined) return false;
@@ -121,13 +120,13 @@ function createHookRuntime(component, props) {
     useEffect(fn, deps) {
       const index = cursor++;
       const slot = slots[index];
-      if (slot === undefined) {
-        slots[index] = { deps };
-        const cleanup = fn();
-        if (typeof cleanup === 'function') cleanups.push(cleanup);
-      } else if (!sameDeps(slot.deps, deps)) {
-        slot.deps = deps;
-      }
+      // 按 React 的语义：依赖没变就不重跑；变了要先清理上一次再执行新的。
+      // 这一点对「运行时就绪后自动关闭引导」这类 effect 是必须的 ——
+      // 只跑首次的话，拿到数据后的那次判断永远不会发生。
+      if (slot !== undefined && sameDeps(slot.deps, deps)) return;
+      if (typeof slot?.cleanup === 'function') slot.cleanup();
+      const cleanup = fn();
+      slots[index] = { deps, cleanup };
     },
     useRef(initial) {
       const index = cursor++;
@@ -153,8 +152,10 @@ function createHookRuntime(component, props) {
       return rerenderRequested;
     },
     dispose() {
-      for (const cleanup of cleanups) cleanup();
-      cleanups.length = 0;
+      for (const slot of slots) {
+        if (typeof slot?.cleanup === 'function') slot.cleanup();
+      }
+      slots = [];
     },
   };
 }
@@ -170,7 +171,21 @@ const primitivesMock = {
   SegmentedControl: stub('SegmentedControl'),
   Button: stub('Button'),
   StateDot: stub('StateDot'),
+  Modal: stub('Modal'),
+  DisclosureRow: stub('DisclosureRow'),
 };
+
+/** 把元素树摊平成节点数组（节点形如 { type, props, children }）。 */
+function flattenNodes(node, out = []) {
+  if (node === null || node === undefined || typeof node !== 'object') return out;
+  if (Array.isArray(node)) {
+    for (const child of node) flattenNodes(child, out);
+    return out;
+  }
+  out.push(node);
+  for (const child of node.children ?? []) flattenNodes(child, out);
+  return out;
+}
 
 /**
  * 产物里的 `require('react')` 拿到的是这个转发层：hooks 一律转给「当前活动运行时」，
@@ -340,7 +355,8 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
         return () => {};
       },
       register: (options, component) => {
-        ctxDriven._registered = { options, component };
+        // 按 slot 名收集：插件现在会注册好几个 slot，只留「最后一个」会串味。
+        (ctxDriven._registrations ??= {})[options.name] = { options, component };
         return () => {};
       },
     },
@@ -363,7 +379,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
   };
 
   plugin.apply(ctxDriven);
-  const element = ctxDriven._registered.component();
+  const element = ctxDriven._registrations['settings.section'].component();
   const runtime = createHookRuntime(element.type, element.props);
 
   const collectByType = (node, type, out = []) => {
@@ -423,6 +439,7 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
     error: null,
     startedAt: null,
     finishedAt: null,
+    steps: [],
   };
   const snapshotFor = (runtime) => ({
     settings: { enabled: true, scale: 1.0, lookAtCursor: true, bubbles: true, position: null, rememberPosition: true },
@@ -440,11 +457,11 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
   const rawNodes = (node, out = []) => {
     if (node === null || node === undefined || typeof node !== 'object') return out;
     if (Array.isArray(node)) {
-      for (const child of node) rawNodes(child, out);
+      for (const child of node) flattenNodes(child, out);
       return out;
     }
     out.push(node);
-    for (const child of node.children ?? []) rawNodes(child, out);
+    for (const child of node.children ?? []) flattenNodes(child, out);
     return out;
   };
 
@@ -459,7 +476,7 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
           return () => {};
         },
         register: (options, component) => {
-          ctxDriven._registered = { options, component };
+          (ctxDriven._registrations ??= {})[options.name] = { options, component };
           return () => {};
         },
       },
@@ -478,12 +495,12 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
       },
     };
     plugin.apply(ctxDriven);
-    const element = ctxDriven._registered.component();
+    const element = ctxDriven._registrations['settings.section'].component();
     const hookRuntime = createHookRuntime(element.type, element.props);
     let tree = hookRuntime.render();
     await new Promise((resolve) => setTimeout(resolve, 10));
     tree = hookRuntime.render();
-    const nodes = rawNodes(tree);
+    const nodes = flattenNodes(tree);
     return { calls, nodes, dispose: () => hookRuntime.dispose() };
   };
 
@@ -563,6 +580,234 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
   // 原始节点里 type 是函数，JSON 会丢掉它，所以按引用判断基元。
   check('已就绪时用了官方状态点', doneView.nodes.some((node) => node.type === primitivesMock.StateDot), true);
   doneView.dispose();
+}
+
+console.log('\n[4e] 插件页：启用引导弹窗（plugins.bundle.activation）');
+{
+  // 两个插件页 slot 都是 kind:keyed，key 必须是包名；宿主另外传 onDismiss / onOpenDetails。
+  const renderPrompt = async (runtime, extraProps = {}) => {
+    const ctxDriven = {
+      logger: { warn() {}, info() {} },
+      effect: (fn) => fn(),
+      slots: {
+        inject: (_slot, callback) => {
+          callback();
+          return () => {};
+        },
+        register: (options, component) => {
+          (ctxDriven._registrations ??= {})[options.name] = { options, component };
+          return () => {};
+        },
+      },
+      connection: {
+        rpc: {
+          call: () => Promise.resolve({ ok: true, value: { runtime } }),
+        },
+      },
+    };
+    plugin.apply(ctxDriven);
+    const registration = ctxDriven._registrations['plugins.bundle.activation'];
+    const element = registration.component({ packageName: 'dsh-cyberwhale', ...extraProps });
+    const hookRuntime = createHookRuntime(element.type, element.props);
+    // 共享 store 是异步拉的，等一轮再取树，否则看到的还是 snapshot=null 的首帧。
+    hookRuntime.render();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return {
+      options: registration.options,
+      render: () => flattenNodes(hookRuntime.render()),
+      dispose: () => hookRuntime.dispose(),
+    };
+  };
+  const pluginRuntime = (overrides) => ({
+    running: false,
+    ready: false,
+    pid: null,
+    error: null,
+    lastExit: null,
+    provisionable: false,
+    prepare: { status: 'idle', phase: null, received: 0, total: 0, source: null, error: null, startedAt: null, finishedAt: null, steps: [] },
+    ...overrides,
+  });
+  const modalOf = (nodes) => nodes.find((node) => node.type === primitivesMock.Modal);
+  const footerLabels = (modal) => (modal?.props.footer ?? []).map((node) => node.children?.[0]);
+  const footerButton = (modal, label) => (modal?.props.footer ?? []).find((node) => node.children?.[0] === label);
+
+  const dismissed = [];
+  const opened = [];
+  const missing = await renderPrompt(pluginRuntime({ provisionable: true }), {
+    onDismiss: () => dismissed.push(true),
+    onOpenDetails: () => opened.push(true),
+  });
+  check('注册到 plugins.bundle.activation', missing.options.name, 'plugins.bundle.activation');
+  check('key 是包名', missing.options.key, 'dsh-cyberwhale');
+
+  const prompt = modalOf(missing.render());
+  check('缺运行时时弹窗打开', prompt?.props.open, true);
+  check('标题说明要准备运行环境', String(prompt?.props.title ?? '').includes('运行环境'), true);
+  check('按钮是「稍后」+「前往安装」', footerLabels(prompt).join(' / '), '稍后 / 前往安装');
+  check('弹窗没被误关', dismissed.length, 0);
+
+  footerButton(prompt, '前往安装').props.onClick();
+  check('「前往安装」打开组合包详情', opened.length, 1);
+  footerButton(prompt, '稍后').props.onClick();
+  check('「稍后」关闭引导', dismissed.length, 1);
+  missing.dispose();
+
+  // 运行时已就绪 → 不打扰，而且要自己把引导收掉（否则会一直挂在插件页上）
+  const readyDismissed = [];
+  const ready = await renderPrompt(pluginRuntime({ ready: true }), { onDismiss: () => readyDismissed.push(true) });
+  check('就绪时弹窗不打开', modalOf(ready.render())?.props.open, false);
+  check('就绪时自动关闭引导', readyDismissed.length, 1);
+  ready.dispose();
+
+  // 已经在准备 → 也不再打扰
+  const busy = await renderPrompt(
+    pluginRuntime({
+      provisionable: true,
+      prepare: { status: 'running', phase: 'downloading', received: 0, total: 0, source: null, error: null, startedAt: Date.now(), finishedAt: null, steps: [] },
+    }),
+    { onDismiss: () => {} },
+  );
+  check('已在准备时不重复弹引导', modalOf(busy.render())?.props.open, false);
+  busy.dispose();
+}
+
+console.log('\n[4f] 插件页：详情页准备面板（plugins.bundle.config）');
+{
+  const renderPanel = async (runtime) => {
+    const calls = [];
+    const ctxDriven = {
+      logger: { warn() {}, info() {} },
+      effect: (fn) => fn(),
+      slots: {
+        inject: (_slot, callback) => {
+          callback();
+          return () => {};
+        },
+        register: (options, component) => {
+          (ctxDriven._registrations ??= {})[options.name] = { options, component };
+          return () => {};
+        },
+      },
+      connection: {
+        rpc: {
+          call: (_channel, endpoint, payload) => {
+            calls.push({ endpoint, payload });
+            if (endpoint === 'getState') return Promise.resolve({ ok: true, value: { runtime } });
+            // prepareRuntime / cancelRuntime 都是「立刻返回当前快照」，活在宿主后台继续。
+            return Promise.resolve({
+              ok: true,
+              value: { prepare: { status: 'running', phase: 'checking', received: 0, total: 0, source: null, error: null, startedAt: Date.now(), finishedAt: null, steps: [] } },
+            });
+          },
+        },
+      },
+    };
+    plugin.apply(ctxDriven);
+    const registration = ctxDriven._registrations['plugins.bundle.config'];
+    const element = registration.component({ packageName: 'dsh-cyberwhale', view: 'page' });
+    const hookRuntime = createHookRuntime(element.type, element.props);
+    hookRuntime.render();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return {
+      options: registration.options,
+      calls,
+      render: () => flattenNodes(hookRuntime.render()),
+      dispose: () => hookRuntime.dispose(),
+    };
+  };
+  const labelOfButton = (node) => node.children?.[0];
+  const buttonsOf = (nodes) => nodes.filter((node) => node.type === primitivesMock.Button);
+  const clickButton = async (view, label) => {
+    buttonsOf(view.render()).find((node) => labelOfButton(node) === label).props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  const panelRuntime = (overrides) => ({
+    running: false,
+    ready: false,
+    pid: null,
+    error: null,
+    lastExit: null,
+    provisionable: false,
+    prepare: { status: 'idle', phase: null, received: 0, total: 0, source: null, error: null, startedAt: null, finishedAt: null, steps: [] },
+    ...overrides,
+  });
+
+  // 缺运行时 → 估算 + 「下载并准备」
+  const missing = await renderPanel(panelRuntime({ provisionable: true }));
+  check('注册到 plugins.bundle.config', missing.options.name, 'plugins.bundle.config');
+  check('key 是包名', missing.options.key, 'dsh-cyberwhale');
+  const missingText = JSON.stringify(missing.render());
+  check('面板标题是「运行环境」', missingText.includes('运行环境'), true);
+  check('准备前给出解包后的体积估算', missingText.includes('解包后约 350 MB'), true);
+  check('有「下载并准备」按钮', buttonsOf(missing.render()).map(labelOfButton).includes('下载并准备'), true);
+
+  await clickButton(missing, '下载并准备');
+  check('点击调用 prepareRuntime', missing.calls.some((call) => call.endpoint === 'prepareRuntime'), true);
+  missing.dispose();
+
+  // 下载中 → 摘要（当前步骤 + 真实字节）+ 「取消」，步骤列表默认折叠
+  const running = await renderPanel(panelRuntime({
+    provisionable: true,
+    prepare: {
+      status: 'running',
+      phase: 'downloading',
+      received: 10485760,
+      total: 118000000,
+      source: 'official',
+      error: null,
+      startedAt: Date.now() - 3000,
+      finishedAt: null,
+      steps: [
+        { kind: 'check', status: 'done', startedAt: Date.now() - 3000, finishedAt: Date.now() - 2000, received: 0, total: 0, error: null },
+        { kind: 'download', status: 'running', startedAt: Date.now() - 2000, finishedAt: null, received: 10485760, total: 118000000, error: null },
+      ],
+    },
+  }));
+  const runningText = JSON.stringify(running.render());
+  check('下载中提供「取消」', buttonsOf(running.render()).map(labelOfButton).includes('取消'), true);
+  check('摘要显示当前步骤', runningText.includes('下载 Electron'), true);
+  check('摘要显示真实字节', runningText.includes('10.0 / 112.5 MB'), true);
+  check('步骤列表默认折叠', runningText.includes('检查本机运行时'), false);
+
+  const disclosure = running.render().find((node) => node.type === primitivesMock.DisclosureRow);
+  check('用了官方的可折叠摘要行', disclosure !== undefined, true);
+  check('摘要行带官方状态点', flattenNodes(disclosure.props.icon).some((node) => node.type === primitivesMock.StateDot), true);
+
+  disclosure.props.onToggle();
+  const expandedText = JSON.stringify(running.render());
+  check('展开后列出每一步', expandedText.includes('检查本机运行时') && expandedText.includes('下载 Electron'), true);
+
+  await clickButton(running, '取消');
+  check('点击取消调用 cancelRuntime', running.calls.some((call) => call.endpoint === 'cancelRuntime'), true);
+  running.dispose();
+
+  // 失败 → 错误原文 + 「重试」
+  const failed = await renderPanel(panelRuntime({
+    provisionable: true,
+    prepare: {
+      status: 'failed',
+      phase: 'downloading',
+      received: 0,
+      total: 0,
+      source: 'official',
+      error: '官方源与国内镜像都不可达',
+      startedAt: Date.now() - 5000,
+      finishedAt: Date.now(),
+      steps: [{ kind: 'download', status: 'failed', startedAt: Date.now() - 5000, finishedAt: Date.now(), received: 0, total: 0, error: '官方源与国内镜像都不可达' }],
+    },
+  }));
+  const failedNodes = failed.render();
+  check('失败时显示错误原文', JSON.stringify(failedNodes).includes('官方源与国内镜像都不可达'), true);
+  check('失败时按钮变成「重试」', buttonsOf(failedNodes).map(labelOfButton).includes('重试'), true);
+  failed.dispose();
+
+  // 就绪 → 状态点，不再提供下载
+  const done = await renderPanel(panelRuntime({ ready: true, provisionable: false }));
+  const doneNodes = done.render();
+  check('就绪时显示已就绪', JSON.stringify(doneNodes).includes('运行环境已就绪'), true);
+  check('就绪时不再提供下载按钮', buttonsOf(doneNodes).map(labelOfButton).includes('下载并准备'), false);
+  done.dispose();
 }
 
 console.log('\n[5] 组件内部的 RPC 调用');

@@ -431,10 +431,11 @@ console.log('\n[5d] 运行环境：getState 新字段与准备端点');
   check('运行时可用的前提下 provisionable=false', idle.value.runtime.provisionable, false);
   check('getState 带 runtime.prepare.status', idle.value.runtime.prepare.status, 'idle');
   check(
-    'prepare 的字段齐全（设置页按它渲染进度）',
+    'prepare 的字段齐全（插件页按它渲染进度）',
     Object.keys(idle.value.runtime.prepare).sort(),
-    ['error', 'finishedAt', 'phase', 'received', 'source', 'startedAt', 'status', 'total'],
+    ['error', 'finishedAt', 'phase', 'received', 'source', 'startedAt', 'status', 'steps', 'total'],
   );
+  check('初始没有步骤', Array.isArray(idle.value.runtime.prepare.steps) && idle.value.runtime.prepare.steps.length, 0);
 
   const beforeSpawns = spawnedHandles.length;
   const started = await rpc('prepareRuntime', {});
@@ -442,12 +443,22 @@ console.log('\n[5d] 运行环境：getState 新字段与准备端点');
   // 端点必须【立即】返回：下载要几分钟，若等它完成，设置页就没法显示进度了。
   check('prepareRuntime 立即返回 running', started.value.prepare.status, 'running');
   check('prepareRuntime 立即返回 phase=checking', started.value.prepare.phase, 'checking');
+  check('启动后立刻记下第一步', started.value.prepare.steps[0]?.kind, 'check');
+  check('第一步是进行中', started.value.prepare.steps[0]?.status, 'running');
 
   await sleep(400);
   const after = (await rpc('getState')).value.runtime;
   check('本机已有运行时时准备立即完成', after.prepare.status, 'done');
   check('完成后 phase 是 ready', after.prepare.phase, 'ready');
   check('完成后清掉错误', after.prepare.error, null);
+  // 步骤流水只记真实发生过的事：本机已有运行时时不会下载，
+  // 所以不该凭空多出 download / verify / extract 三个永远「未开始」的步骤。
+  check(
+    '已有运行时只记「检查」这一步',
+    after.prepare.steps.map((step) => `${step.kind}:${step.status}`),
+    ['check:done'],
+  );
+  check('步骤带开始与结束时间', typeof after.prepare.steps[0].startedAt === 'number' && typeof after.prepare.steps[0].finishedAt === 'number', true);
   // 成功后要自动把「缺运行时没起来」的窗口拉起来，用户不必重启 DSH。
   check('准备完成后桌宠窗口被重新拉起', spawnedHandles.length > beforeSpawns, true);
 
