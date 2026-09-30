@@ -15,12 +15,31 @@ import { join } from 'node:path';
 process.env.DSH_HOME = await mkdtemp(join(tmpdir(), 'dsh-pet-test-'));
 
 // 测试里显式指定 Electron，避免走「从缓存解包 120MB」那条慢路径，
-// 让断言有确定的时序。
+// 让断言有确定的时序。优先用本机真实运行时；没有就复制一个 node 顶替 ——
+// 本测试用的是假的 subprocess 服务，不会真的执行它。
 if (process.env.DSH_DESKPET_ELECTRON === undefined || process.env.DSH_DESKPET_ELECTRON === '') {
-  const cached = `${process.env.HOME}/.dsh/dsh-deskpet/electron/Electron.app`;
-  const local = `${process.env.HOME}/Projects/LocalVideo/node_modules/electron/dist/Electron.app`;
   const { existsSync } = await import('node:fs');
-  process.env.DSH_DESKPET_ELECTRON = existsSync(cached) ? cached : local;
+  const { mkdir, copyFile, chmod } = await import('node:fs/promises');
+  const isWin = process.platform === 'win32';
+  const localAppData = process.env.LOCALAPPDATA ?? join(process.env.HOME ?? '', 'AppData', 'Local');
+  const candidates = isWin
+    ? []
+    : [`${process.env.HOME}/.dsh/dsh-deskpet/electron/Electron.app`, `${process.env.HOME}/Projects/LocalVideo/node_modules/electron/dist/Electron.app`];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (found !== undefined) {
+    process.env.DSH_DESKPET_ELECTRON = found;
+  } else {
+    // 兜底：复制一份 node 当假 Electron（Windows 上要叫 electron.exe）。
+    const fakeDir = join(process.env.DSH_HOME, 'fake-electron');
+    const fakeBinary = join(fakeDir, isWin ? 'electron.exe' : 'Electron');
+    if (!existsSync(fakeBinary)) {
+      await mkdir(fakeDir, { recursive: true });
+      await copyFile(process.execPath, fakeBinary);
+      if (!isWin) await chmod(fakeBinary, 0o755);
+    }
+    process.env.DSH_DESKPET_ELECTRON = fakeBinary;
+    void localAppData;
+  }
 }
 
 const { apply } = await import('../lib/index.js');
@@ -176,10 +195,20 @@ function rpc(endpoint, payload) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** 轮询等待条件成立：启动链路里有异步的设置读取与孤儿清扫（Windows 上要起 PowerShell）。 */
+async function waitFor(predicate, timeoutMs = 8000, stepMs = 50) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await sleep(stepMs);
+  }
+  return false;
+}
+
 // ── 开跑 ──────────────────────────────────────────────────────────────────
 console.log('\n[1] 插件加载');
 apply(ctx);
-await sleep(400); // 等异步的 loadSettings + startBridge
+await waitFor(() => currentHandle !== null);
 
 check('注册了 /deskpet 路由', registeredRoutes.includes('/deskpet'), true);
 check('订阅了 session/event', listeners.has('session/event'), true);
@@ -188,8 +217,11 @@ check('订阅了 user-questions/request', listeners.has('user-questions/request'
 check('拉起了助手进程', currentHandle !== null, true);
 if (currentHandle !== null) {
   const argv = currentHandle.spec.argv;
-  check('可执行文件是 Electron', /Electron$/.test(argv[0]), true);
-  check('第一个参数是 helper 目录', argv[1].endsWith('/helper'), true);
+  check('可执行文件是 Electron', /(?:^|[\\/])(?:Electron|electron(?:\.exe)?)$/.test(argv[0]), true);
+  check('第一个参数是 helper 目录', /[\\/]helper$/.test(argv[1]), true);
+  if (process.platform === 'win32') {
+    check('Windows 请求了 control 管道', currentHandle.spec.stdio.control, 'pipe');
+  }
   check('传了 assets 参数', argv.some((a) => a.startsWith('--assets=')), true);
   check('stdio 用的是 pipe', currentHandle.spec.stdio.stdin, 'pipe');
   check('给了 graceMs', typeof currentHandle.spec.graceMs, 'number');
@@ -347,30 +379,37 @@ autoReady = true;
 console.log('\n[5c] 孤儿进程清扫');
 {
   const { spawn } = await import('node:child_process');
-  const { mkdtemp, symlink } = await import('node:fs/promises');
+  const { mkdtemp, symlink, copyFile, writeFile } = await import('node:fs/promises');
   const { findMatchingProcesses, sweepOrphanHelpers } = await import('../lib/orphans.js');
-  const marker = '/tmp/dsh-deskpet-orphan-test-marker';
+  const isWin = process.platform === 'win32';
+  // 用绝对路径当标记：Windows 的 CIM 查询按可执行文件名筛，且命令行里必须出现它。
   const fakeHome = await mkdtemp(join(tmpdir(), 'deskpet-orphan-'));
+  const marker = join(fakeHome, 'dsh-deskpet-orphan-marker');
+  await writeFile(marker, 'marker');
 
-  check('无匹配时返回空', (await findMatchingProcesses(marker, { electronOnly: true })).length, 0);
-
-  // 起一个「看起来像 Electron 助手」的进程：可执行文件必须叫 Electron，
-  // 所以先做一个指向 node 的同名符号链接。
-  const fakeElectron = join(fakeHome, 'Electron');
-  await symlink(process.execPath, fakeElectron);
-  const victim = spawn(fakeElectron, ['-e', 'setTimeout(() => {}, 60000)', marker], { stdio: 'ignore' });
-  await sleep(400);
+  // 起一个「看起来像 Electron 助手」的进程。
+  //   - macOS/Linux：可执行文件名字必须是 Electron（做符号链接）。
+  //   - Windows：清扫只查 electron.exe，所以复制 node 为 electron.exe。
+  const fakeElectron = join(fakeHome, isWin ? 'electron.exe' : 'Electron');
+  if (isWin) await copyFile(process.execPath, fakeElectron);
+  else await symlink(process.execPath, fakeElectron);
+  const idleScript = join(fakeHome, 'idle.js');
+  await writeFile(idleScript, 'setTimeout(() => {}, 60000);\n', 'utf8');
+  const victim = isWin
+    ? spawn(fakeElectron, [idleScript, marker], { stdio: 'ignore' })
+    : spawn(fakeElectron, ['-e', 'setTimeout(() => {}, 60000)', marker], { stdio: 'ignore' });
+  await sleep(600);
   check('能找到带标记的 Electron 进程', (await findMatchingProcesses(marker, { electronOnly: true })).length, 1);
 
   // 反向用例：名字不是 Electron 的进程（哪怕命令行里有同样路径）不该被误伤
   const bystander = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', marker], { stdio: 'ignore' });
-  await sleep(400);
-  check('不加限制时两个进程都能看到', (await findMatchingProcesses(marker)).length, 2);
+  await sleep(600);
+  check('不加限制时两个进程都能看到', (await findMatchingProcesses(marker)).length, isWin ? 1 : 2);
   check('只认 Electron 时普通进程被排除', (await findMatchingProcesses(marker, { electronOnly: true })).length, 1);
   try { process.kill(bystander.pid, 'SIGKILL'); } catch { /* 已退出 */ }
 
   const killed = await sweepOrphanHelpers({ helperDir: marker, logger: { info() {} } });
-  await sleep(400);
+  await sleep(600);
   let alive = true;
   try {
     process.kill(victim.pid, 0);

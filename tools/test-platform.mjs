@@ -224,12 +224,21 @@ console.log('\n[7] findCachedZip / resolveElectron 要用「请求的」平台�
   // 注意这里不能用 emptyEnv —— 它设了 ELECTRON_CACHE，会把平台专属的
   // 缓存路径覆盖掉，就验不出"Windows 形状"了。
   const winProbe = await probeElectron({ env: { HOME: homedir() }, platform: 'win32', arch: 'x64' });
-  check('win32 探针失败（本机没有 Windows 运行时是正常的）', winProbe.ok, false);
-  check('  报错里提到 win32-x64 的产物名', winProbe.error.includes('win32-x64'), true);
-  check('  报错里的缓存路径是 Windows 形状', winProbe.error.includes(join('AppData', 'Local', 'electron', 'Cache')), true);
-
   const linuxProbe = await probeElectron({ env: { HOME: homedir() }, platform: 'linux', arch: 'arm64' });
-  check('linux 报错里提到 linux-arm64', linuxProbe.error.includes('linux-arm64'), true);
+
+  if (osPlatform() === 'win32') {
+    // 在 Windows 上跑这套测试时，本机**就是** win32 且有运行时 —— win32 探针会成功。
+    // 「报错按请求平台组织」这件事改用 linux 探针验（Windows 上必然没有 linux 运行时）。
+    check('Windows 主机上 win32 探针成功', winProbe.ok, true);
+    check('linux 探针在本机失败', linuxProbe.ok, false);
+    check('  linux 报错里提到 linux-arm64', linuxProbe.error.includes('linux-arm64'), true);
+    check('  linux 报错里的缓存路径是 Linux 形状', linuxProbe.error.includes('.cache'), true);
+  } else {
+    check('win32 探针失败（本机没有 Windows 运行时是正常的）', winProbe.ok, false);
+    check('  报错里提到 win32-x64 的产物名', winProbe.error.includes('win32-x64'), true);
+    check('  报错里的缓存路径是 Windows 形状', winProbe.error.includes(join('AppData', 'Local', 'electron', 'Cache')), true);
+    check('linux 报错里提到 linux-arm64', linuxProbe.error.includes('linux-arm64'), true);
+  }
 }
 
 // ── 真解包冒烟测试（当前平台）────────────────────────────────────────────
