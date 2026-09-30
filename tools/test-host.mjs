@@ -353,45 +353,6 @@ console.log('\n[5c] 孤儿进程清扫');
   check('没有把当前进程算进去', (await findMatchingProcesses(process.argv[1] ?? 'x')).includes(process.pid), false);
 }
 
-console.log('\n[5d] 旧目录迁移');
-{
-  const { mkdtemp, mkdir, writeFile, readFile, symlink } = await import('node:fs/promises');
-  const { existsSync } = await import('node:fs');
-  const { migrateLegacyHome } = await import('../lib/migrate.js');
-  const { loadSettings } = await import('../lib/settings.js');
-
-  // 场景一：只有旧目录 → 应当整体迁移
-  const home = await mkdtemp(join(tmpdir(), 'deskpet-migrate-'));
-  await mkdir(join(home, 'dsh-pet-whale'), { recursive: true });
-  await writeFile(
-    join(home, 'dsh-pet-whale', 'settings.json'),
-    JSON.stringify({ scale: 1.3, bubbles: false }),
-    'utf8',
-  );
-  const moved = await migrateLegacyHome({ env: { DSH_HOME: home }, logger: { info() {}, debug() {} } });
-  check('迁移执行了', moved, true);
-  check('新目录已存在', existsSync(join(home, 'dsh-deskpet')), true);
-  check('旧目录已消失', existsSync(join(home, 'dsh-pet-whale')), false);
-  const migrated = await loadSettings({ DSH_HOME: home });
-  check('设置内容被保留（scale）', migrated.scale, 1.3);
-  check('设置内容被保留（bubbles）', migrated.bubbles, false);
-
-  // 场景二：新旧都在 → 不动，避免覆盖新数据
-  const home2 = await mkdtemp(join(tmpdir(), 'deskpet-migrate2-'));
-  await mkdir(join(home2, 'dsh-pet-whale'), { recursive: true });
-  await mkdir(join(home2, 'dsh-deskpet'), { recursive: true });
-  await writeFile(join(home2, 'dsh-pet-whale', 'settings.json'), JSON.stringify({ scale: 0.7 }), 'utf8');
-  await writeFile(join(home2, 'dsh-deskpet', 'settings.json'), JSON.stringify({ scale: 1.6 }), 'utf8');
-  const moved2 = await migrateLegacyHome({ env: { DSH_HOME: home2 }, logger: { info() {}, debug() {} } });
-  check('新旧并存时不迁移', moved2, false);
-  check('新数据未被覆盖', (await loadSettings({ DSH_HOME: home2 })).scale, 1.6);
-  check('旧目录仍在', existsSync(join(home2, 'dsh-pet-whale')), true);
-
-  // 场景三：都没有 → 什么都不做
-  const home3 = await mkdtemp(join(tmpdir(), 'deskpet-migrate3-'));
-  check('无旧目录时安全返回', await migrateLegacyHome({ env: { DSH_HOME: home3 } }), false);
-}
-
 console.log('\n[6] user-questions waterfall 必须放行 next()');
 let nextCalled = false;
 const waterfallResult = emit('user-questions/request', { question: 'x' }, () => {

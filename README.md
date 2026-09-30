@@ -457,7 +457,6 @@ lib/
   settings.js           设置读写
   electron-runtime.js   Electron 运行时定位
   orphans.js            启动时的孤儿窗口清扫
-  migrate.js            旧目录名的一次性迁移
   client.js             客户端包（由 client/build.mjs 生成）
 client/
   index.js              设置页源码（用官方 UI 基元）
