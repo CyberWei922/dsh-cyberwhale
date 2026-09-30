@@ -189,4 +189,9 @@ node -e "const p=require('/tmp/scratch-home/profiles/web/package.json');console.
 
 - 走 Git 地址或压缩包时，兼容性只能等抓下来之后判定；不兼容会回滚 profile 文件，用户看到的是安装失败。
 - 插件没有自动升级：升级要先卸载再装新版。
-- Electron 运行时（约 110 MB）不在安装包里，装完还需要在设置页点一次「准备运行时」，见 [README](../README.md#安装)。
+- Electron 运行时（约 110 MB）不在安装包里。首次启动会自动复用 `@electron/get` 缓存（命中缓存就不用下载），缓存里没有时才需要在设置页点一次「准备运行时」，见 [README](../README.md#安装)。
+- **刚发布不足 24 小时的版本会被 pnpm 的供应链策略拦一下**。pnpm 11 默认有 `minimumReleaseAge`（避免装到刚被抢注/投毒的版本）：实测刚发布几分钟的 `dsh-cyberwhale@0.1.0` 会被 pnpm 打印提示，并自动把 `dsh-cyberwhale@0.1.0` 写进 profile 的 `pnpm-workspace.yaml` → `minimumReleaseAgeExclude`。
+  - 默认（`minimumReleaseAgeStrict` 未开）只是提示，安装照常成功。
+  - 若用户把 `minimumReleaseAgeStrict` 设为 `true`，安装会被拦下要求确认；这种情况让用户等发布满 24 小时，或手动把包名加进 `minimumReleaseAgeExclude`。
+  - 这个副作用会写进用户的 profile，属于 pnpm 的正常行为，不是插件的问题。
+- macOS 上的 Electron 首次解包（122 MB 的 zip）需要几十秒，期间设置页的「运行状态」是「窗口启动中…」，属正常现象。
