@@ -77,6 +77,7 @@ function makeHandle() {
 }
 
 let currentHandle = null;
+let autoReady = true;
 
 // cordis 会把注入的服务挂成 ctx 上的属性（`ctx.agents`），同时也支持 ctx.get()。
 const agentsService = {
@@ -118,6 +119,8 @@ const ctx = {
     spawn(spec) {
       currentHandle = makeHandle();
       currentHandle.spec = spec;
+      const handle = currentHandle;
+      if (autoReady) queueMicrotask(() => handle.stdout.write(`${JSON.stringify({ t: 'ready', pid: 123 })}\n`));
       return currentHandle;
     },
   },
@@ -312,6 +315,26 @@ await rpc('updateSettings', { enabled: true });
 await sleep(60);
 check('重新打开只起一个窗口', spawnedHandles.length, spawnsBeforeReopen + 1);
 check('重新打开后恢复运行', (await rpc('getState')).value.runtime.running, true);
+
+console.log('\n[5b-extra] 助手就绪前状态不得丢失');
+autoReady = false;
+await rpc('command', { action: 'restart' });
+sent.length = 0;
+emit('session/event', { id: 'session-main' }, { type: 'turn/start' });
+await sleep(120);
+check('就绪前不发送状态', sent.filter((m) => m.t === 'state').length, 0);
+await rpc('updateSettings', { scale: 1.2 });
+currentHandle.stdout.write(`${JSON.stringify({ t: 'ready', pid: 456 })}\n`);
+await sleep(30);
+check('就绪后补发当前状态', sent.filter((m) => m.t === 'state').at(-1)?.v, 'running');
+check('就绪后补发当前气泡', sent.filter((m) => m.t === 'bubble').at(-1)?.status, '正在分析请求');
+check('就绪后使用最新配置', sent.filter((m) => m.t === 'config').at(-1)?.scale, 1.2);
+await rpc('updateSettings', { bubbles: false });
+sent.length = 0;
+await rpc('updateSettings', { bubbles: true });
+await sleep(30);
+check('重新打开气泡恢复当前任务', sent.filter((m) => m.t === 'bubble').at(-1)?.status, '正在分析请求');
+autoReady = true;
 
 console.log('\n[5c] 孤儿进程清扫');
 {

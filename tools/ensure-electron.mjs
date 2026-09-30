@@ -13,24 +13,21 @@
 
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import {
   artifactSuffix,
   electronCacheRoot,
   findCachedZip,
   pluginRoot,
-  resolveElectron,
+  probeElectron,
+  extractZip,
 } from '../lib/electron-runtime.js';
 import { resolveDshHome } from '../lib/settings.js';
-
-const run = promisify(execFile);
 
 const DEFAULT_VERSION = '43.4.1';
 
@@ -46,26 +43,12 @@ const targetDir = join(resolveDshHome(), 'dsh-deskpet', 'electron');
 
 async function alreadyPrepared() {
   if (force) return false;
-  const probe = await resolveElectron();
+  const probe = await probeElectron();
   if (probe.ok) {
     console.log(`已就绪：${probe.binary}  (来源：${probe.source})`);
     return true;
   }
   return false;
-}
-
-async function extract(zip, destination) {
-  await rm(destination, { recursive: true, force: true });
-  await mkdir(destination, { recursive: true });
-  if (process.platform === 'darwin') {
-    try {
-      await run('ditto', ['-x', '-k', zip, destination]);
-      return;
-    } catch {
-      // 回落到 unzip
-    }
-  }
-  await run('unzip', ['-q', '-o', zip, '-d', destination]);
 }
 
 async function download(url, destination, label) {
@@ -118,8 +101,8 @@ async function main() {
   const cached = await findCachedZip({});
   if (cached !== null && !force) {
     console.log(`命中本地缓存：${cached.zip}`);
-    await extract(cached.zip, targetDir);
-    const probe = await resolveElectron();
+    await extractZip(cached.zip, targetDir);
+    const probe = await probeElectron();
     if (probe.ok) {
       console.log(`已就绪：${probe.binary}  (来源：缓存)`);
       return;
@@ -143,12 +126,12 @@ async function main() {
       throw new Error(`校验失败：期望 ${expected}，实际 ${actual}`);
     }
     console.log('  校验通过 (sha256)');
-    await extract(zipPath, targetDir);
+    await extractZip(zipPath, targetDir);
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
 
-  const probe = await resolveElectron();
+  const probe = await probeElectron();
   if (!probe.ok) throw new Error(`解包完成但仍不可用：${probe.error}`);
   console.log(`已就绪：${probe.binary}`);
   console.log(`  DSH home：${resolveDshHome()}`);

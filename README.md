@@ -121,34 +121,16 @@ export DSH_DESKPET_ELECTRON="$HOME/Projects/MyApp/node_modules/electron/dist/Ele
 
 | 层 | 内容 | 什么时候 |
 |---|---|---|
-| **实时层** | 从推理流提炼的进度句 | 模型正在思考时 |
-| **碎碎念层** | 固定短语池（「在这儿呢」「交给我」…） | 空闲 / 实时层回落之后 |
+| **实时层** | 会话标题 + 当前任务状态 | 当前回合进行中 |
+| **碎碎念层** | 固定短语池（「在这儿呢」「交给我」…） | 空闲或回合结束后 |
 
-实时层的链路：
+宿主通过 `session/title`、`turn/start`、`tool/call`、`tool/result`、`turn/end`
+跟踪任务，并从 `agent/assistant-stream` 的 `tool-call-delta` 读取准备调用的工具名。
+`lib/activity.js` 生成两行文案，`lib/index.js` 用 90ms 合并窗口减少切换闪烁，再经
+stdio 下发给 Electron 助手。不会提炼或显示 reasoning token 内容。
 
-```
-agent/assistant-stream 的 reasoning-delta（逐 token 的瞬态帧）
-        │
-        │  lib/progress.js —— 提炼
-        │    · 按句边界切，取最后一个完整句子
-        │    · 去掉句首元叙述（「让我」「好的」「首先」…）
-        │    · 按显示宽度截断（CJK 算 2、拉丁算 1）
-        │    · 只有结果变化时才产出
-        ▼
-    lib/bubble.js —— 节流
-        │    · 最小间隔 3 秒（照搬 Codex 桌面端）
-        │    · 间隔内排队，到点只放最后一条
-        │    · 重要事件可插队立即刷新
-        ▼
-    Electron 助手 → 渲染层气泡（实时层配色与碎碎念区分）
-```
-
-**为什么需要「提炼」这一层**：Codex 桌面端直接消费一个**结构化进度事件流**
-（`cot-v5-progress`，每条已经是归纳好的短句）。DSH 没有这种东西，只暴露**原始推理
-token 流** —— 又长又碎还夹着大量内心独白，直接显示会既泄露过多又观感很乱。
-
-**为什么需要「节流」**：推理流来得比人眼能读的快得多。相关逻辑照搬 Codex，
-详见 [lib/bubble.js](lib/bubble.js) 顶部注释（含两处有意与 Codex 不同的地方）。
+窗口就绪和自动重启后会重新同步当前状态。任务状态由回合结束事件清空，不因
+长命令期间没有新事件而自动回落。
 
 ### 配色的注意事项
 
@@ -295,10 +277,10 @@ node tools/ensure-electron.mjs          # 准备 Electron 运行时
 node tools/check-consistency.mjs        # 检查各帧画得有多不一致（见下）
 node tools/make-placeholder-atlas.mjs   # 生成纯几何占位图集（无素材时用）
 
-npm test                                # 离线测试（392 项，一次跑完）
+npm test                                # 离线测试（一次跑完）
 ```
 
-`npm test` 包含五套离线测试：
+`npm test` 包含七套离线测试：
 
 | 测试 | 覆盖 |
 |---|---|
@@ -308,6 +290,7 @@ npm test                                # 离线测试（392 项，一次跑完�
 | `test-activity.mjs` | 任务状态文案（含与 DSH 词典逐字对照）|
 | `test-geometry.mjs` | 窗口 / 宠物几何与位置限制 |
 | `test-platform.mjs` | **跨平台分支**（darwin / win32 / linux）|
+| `test-regressions.mjs` | 拖动恢复、长任务、并发保存、启动取消与运行时准备 |
 
 另有三个**真机验证**（需要桌面环境，不进 `npm test`）：
 
