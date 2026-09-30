@@ -10,6 +10,14 @@ reference/
 # 图集的散帧源文件（20MB，运行时用不到；成品是 assets/spritesheet.png）
 individual-draft/
 
+# 绘图 AI 的工作区与生成产物（体积大、且是过程文件，不是仓库内容）
+#
+# ⚠️ 这两个目录是**别的 AI / 别的会话**在工作时创建的，不是本仓库的产出。
+# 加进来是因为踩过两次坑：一次 `git add -A` 把 output/（10MB 测试产物）提交了，
+# 一次把 regenerated-pet-*/（3.7MB 生成源图）提交了。
+output/
+regenerated-pet-*/
+
 # 系统
 .DS_Store
 *.log
