@@ -84,6 +84,17 @@ const agentsService = {
   list: () => [{ id: 'session-main' }],
 };
 
+/**
+ * sessionTitle 服务桩。
+ *
+ * `get(session)` 是 DSH 上真实存在的方法（`SessionTitleService.get`），
+ * 用来「从会话日志里折叠出最新标题」。插件必须用它主动读标题 ——
+ * 只靠 `session/title` 事件在重启后会拿不到（见 lib/index.js 的 readTitle）。
+ */
+const sessionTitleService = {
+  get: () => ({ title: '测试会话标题', messageSeqs: [], source: { kind: 'fallback' } }),
+};
+
 const ctx = {
   logger: { info() {}, debug() {}, warn() {}, error() {} },
   agents: agentsService,
@@ -100,6 +111,7 @@ const ctx = {
   },
   get(name) {
     if (name === 'agents') return agentsService;
+    if (name === 'sessionTitle') return sessionTitleService;
     return undefined;
   },
   subprocess: {
@@ -207,6 +219,27 @@ const beforeSub = (await rpc('getState')).value.animation;
 emit('session/event', { id: 'session-sub' }, { type: 'turn/start' });
 await sleep(60);
 check('非顶级会话不改变状态', (await rpc('getState')).value.animation, beforeSub);
+
+console.log('\n[3b] 气泡两行：会话标题（回归 —— 插件启动晚于标题事件）');
+{
+  // 真实场景：`session/title` 事件只在标题被设置的那一刻发一次（会话开头，
+  // 或用户改名）。用户中途重启 DSH 之后，插件内存里没有标题，
+  // 如果只被动等事件，气泡第一行会永远是空的 —— 这个 bug 真出现过。
+  // 正确做法是每次开新一轮都主动向 sessionTitle 服务读一次。
+  sent.length = 0;
+  emit('session/event', { id: 'session-main' }, { type: 'turn/start' });
+  await sleep(80);
+
+  const bubble = sent.filter((m) => m.t === 'bubble').at(-1);
+  check('重启后第一行仍有标题（主动读取生效）', bubble?.title, '测试会话标题');
+  check('第二行是任务状态', bubble?.status, '正在分析请求');
+
+  // 反过来：事件真的来了要能覆盖服务读到的值
+  sent.length = 0;
+  emit('session/event', { id: 'session-main' }, { type: 'session/title', data: { title: '改名之后' } });
+  await sleep(120);
+  check('收到 session/title 事件后立刻更新', sent.filter((m) => m.t === 'bubble').at(-1)?.title, '改名之后');
+}
 
 console.log('\n[4] 瞬态到期后自动回落');
 sent.length = 0;

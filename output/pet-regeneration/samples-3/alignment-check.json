@@ -1,0 +1,227 @@
+[
+  {
+    "name": "gaze-a_04",
+    "size": [
+      512,
+      560
+    ],
+    "alpha_bbox": [
+      82,
+      58,
+      428,
+      535
+    ],
+    "fixed_anchors": {
+      "hair_and_headdress_top": {
+        "changed_pixels": 0,
+        "box": [
+          90,
+          58,
+          395,
+          180
+        ]
+      },
+      "right_hair_bow": {
+        "changed_pixels": 0,
+        "box": [
+          317,
+          176,
+          372,
+          212
+        ]
+      },
+      "brooch_and_collar_center": {
+        "changed_pixels": 0,
+        "box": [
+          215,
+          287,
+          263,
+          327
+        ]
+      },
+      "waistband_center": {
+        "changed_pixels": 0,
+        "box": [
+          208,
+          331,
+          273,
+          343
+        ]
+      },
+      "apron_whale": {
+        "changed_pixels": 0,
+        "box": [
+          229,
+          377,
+          274,
+          418
+        ]
+      }
+    },
+    "best_anchor_translation_px": [
+      0,
+      0
+    ],
+    "best_anchor_rgba_error": 0.0,
+    "next_best_translation_error": 9.742279507982204,
+    "source_alpha_centroid": [
+      250.80200544318765,
+      296.1629368040162
+    ],
+    "output_alpha_centroid": [
+      250.80200544318765,
+      296.1629368040162
+    ],
+    "interpretation": "Unchanged anchors remain at identical canvas coordinates. Alpha centroid shifts due to the local pose, not a whole-character translation."
+  },
+  {
+    "name": "waving_01",
+    "size": [
+      512,
+      560
+    ],
+    "alpha_bbox": [
+      82,
+      58,
+      428,
+      535
+    ],
+    "fixed_anchors": {
+      "hair_and_headdress_top": {
+        "changed_pixels": 0,
+        "box": [
+          90,
+          58,
+          395,
+          180
+        ]
+      },
+      "right_hair_bow": {
+        "changed_pixels": 0,
+        "box": [
+          317,
+          176,
+          372,
+          212
+        ]
+      },
+      "brooch_and_collar_center": {
+        "changed_pixels": 0,
+        "box": [
+          215,
+          287,
+          263,
+          327
+        ]
+      },
+      "waistband_center": {
+        "changed_pixels": 0,
+        "box": [
+          208,
+          331,
+          273,
+          343
+        ]
+      },
+      "apron_whale": {
+        "changed_pixels": 0,
+        "box": [
+          229,
+          377,
+          274,
+          418
+        ]
+      }
+    },
+    "best_anchor_translation_px": [
+      0,
+      0
+    ],
+    "best_anchor_rgba_error": 0.0,
+    "next_best_translation_error": 9.742279507982204,
+    "source_alpha_centroid": [
+      250.80200544318765,
+      296.1629368040162
+    ],
+    "output_alpha_centroid": [
+      250.7962514852983,
+      296.16643478913755
+    ],
+    "interpretation": "Unchanged anchors remain at identical canvas coordinates. Alpha centroid shifts due to the local pose, not a whole-character translation."
+  },
+  {
+    "name": "running-right_02",
+    "size": [
+      512,
+      560
+    ],
+    "alpha_bbox": [
+      82,
+      58,
+      428,
+      535
+    ],
+    "fixed_anchors": {
+      "hair_and_headdress_top": {
+        "changed_pixels": 0,
+        "box": [
+          90,
+          58,
+          395,
+          180
+        ]
+      },
+      "right_hair_bow": {
+        "changed_pixels": 0,
+        "box": [
+          317,
+          176,
+          372,
+          212
+        ]
+      },
+      "brooch_and_collar_center": {
+        "changed_pixels": 0,
+        "box": [
+          215,
+          287,
+          263,
+          327
+        ]
+      },
+      "waistband_center": {
+        "changed_pixels": 0,
+        "box": [
+          208,
+          331,
+          273,
+          343
+        ]
+      },
+      "apron_whale": {
+        "changed_pixels": 0,
+        "box": [
+          229,
+          377,
+          274,
+          418
+        ]
+      }
+    },
+    "best_anchor_translation_px": [
+      0,
+      0
+    ],
+    "best_anchor_rgba_error": 0.0,
+    "next_best_translation_error": 9.742279507982204,
+    "source_alpha_centroid": [
+      250.80200544318765,
+      296.1629368040162
+    ],
+    "output_alpha_centroid": [
+      251.59712570634153,
+      293.87917405185027
+    ],
+    "interpretation": "Unchanged anchors remain at identical canvas coordinates. Alpha centroid shifts due to the local pose, not a whole-character translation."
+  }
+]
