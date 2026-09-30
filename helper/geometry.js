@@ -112,6 +112,39 @@ function clampToArea(x, y, metrics, scale, area) {
   };
 }
 
+/**
+ * 把命中区（按 alpha 包围盒内缩的比例）套到宠物矩形上。
+ *
+ * 渲染层与主进程都要算命中区：macOS 由渲染层在 mousemove 里算，
+ * Windows 由主进程按全局光标位置算（见 helper/main.js 的说明）。
+ * 抽成纯函数，两边共用一份逻辑、也能单独测试。
+ *
+ * @param {{ left: number, top: number, width: number, height: number }} pet 宠物矩形
+ * @param {{ left: number, top: number, right: number, bottom: number }} inset 四边内缩比例
+ */
+function insetRect(pet, inset) {
+  return {
+    left: pet.left + pet.width * inset.left,
+    top: pet.top + pet.height * inset.top,
+    width: pet.width * (1 - inset.left - inset.right),
+    height: pet.height * (1 - inset.top - inset.bottom),
+  };
+}
+
+/**
+ * 判断点是否在矩形内（含边界）。
+ * @param {{ x: number, y: number }} point
+ * @param {{ left: number, top: number, width: number, height: number }} rect
+ */
+function rectContains(point, rect) {
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.left + rect.width &&
+    point.y >= rect.top &&
+    point.y <= rect.top + rect.height
+  );
+}
+
 module.exports = {
   CELL,
   MARGIN,
@@ -121,4 +154,6 @@ module.exports = {
   computeMetrics,
   petRectInWindow,
   clampToArea,
+  insetRect,
+  rectContains,
 };

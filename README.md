@@ -19,7 +19,12 @@
 - **独立设置页**：DSH 左侧设置里的「桌宠」页（最下方），开关 / 大小 / 状态一目了然
 - **随应用退出**：窗口是宿主插件的受管子进程，Harness 一退它就走
 
-> **平台**：macOS 已实机验证（arm64 / x64）。**Windows 适配进行中**，
+> **平台**：macOS 已实机验证（arm64 / x64）。Windows 11 x64 的适配在
+> **`feat/windows` 分支**（基于本分支的 `ba6d32c`，含重制版 71 帧图集），
+> 已在真机跑通安装 / 交互 / 注视 / 关闭清理；实现与证据见
+> [docs/windows-adaptation.md](docs/windows-adaptation.md)，
+> 安装与排障见 [docs/windows-install.md](docs/windows-install.md)。
+> Linux 未适配。
 > 代码里的平台分支已经就位并可测（见[跨平台](#跨平台)）。
 > **实测环境**：DeepSeek Harness Desktop `0.2.0-rc.2`，macOS 15。
 
@@ -238,6 +243,18 @@ node tools/test-platform.mjs     # 66 项，覆盖 darwin / win32 / linux
 | **只新增 `win32` 分支，不要改 darwin 分支** | 平台分支是互斥的代码路径，"适配"应该只做加法 |
 | **别碰 `assets/`** | 图集是 3.4MB 二进制，冲突了**没法合并** |
 | `.gitattributes` 已强制 LF | Windows 的 git 默认转 CRLF，会把每个文件都变成"改过了" |
+
+### Windows 侧的三处平台分支（`feat/windows`）
+
+除了上面的运行时解析，Windows 还有三处**必须**与 macOS 不同的实现，
+真机实验与证据见 [docs/windows-adaptation.md](docs/windows-adaptation.md)：
+
+1. **宿主→助手的下行通道走 subprocess 控制管道（fd 7）**，不走 stdin ——
+   Chromium 在 GUI 进程启动时会重置继承来的 fd 0，`process.stdin` 立刻 EOF。
+2. **点击穿透由主进程按全局光标轮询判定** —— Electron 的
+   `setIgnoreMouseEvents(true, {forward:true})` 在 Windows 上走低级鼠标钩子，
+   真机实测时灵时不灵，且转发坐标会过期。
+3. **孤儿清扫用 CIM + `taskkill /T /F`** —— 只杀父进程会留下 GPU/渲染子进程。
 
 拉取别人的改动之后，跑一遍就能知道有没有影响本机：
 

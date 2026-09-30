@@ -30,6 +30,14 @@ const ROWS = 11;
 const MARGIN = 14;
 const BUBBLE_SPACE = 74;
 
+/**
+ * Windows 上点击穿透与光标位置由主进程按全局光标判定（见 helper/main.js 的
+ * 「点击穿透」一节）：Electron 在 Windows 上的 mousemove 转发走低级鼠标钩子，
+ * 真机实测时灵时不灵，而且转发来的坐标会过期/出错。
+ * 渲染层据此不再自己驱动交互，也不再采纳 DOM mousemove 的光标值。
+ */
+const MAIN_HIT_TEST = host?.config?.platform === 'win32';
+
 /** 行内帧数 + 每帧时长（末帧单独给定，来自官方 animation-rows 规范）。 */
 function rowAnimation(row, count, frameMs, lastMs) {
   const cols = Array.from({ length: count }, (_, index) => index);
@@ -143,6 +151,8 @@ async function loadAssets() {
     state.spritesheet = bitmap;
     state.manifest = payload.manifest ?? null;
     state.hitInset = computeAlphaInset(bitmap);
+    // Windows：主进程需要这份内缩比例来做命中判定（macOS 不需要，但上报无害）。
+    host?.reportHitInset?.(state.hitInset);
     fallback.dataset.visible = '0';
     syncCanvas();
   } catch (error) {
@@ -574,6 +584,8 @@ function frame(now) {
 
 // ── 命中区 / 交互 ─────────────────────────────────────────────────────────
 function updateInteractivity(point) {
+  // Windows：主进程全权负责（轮询全局光标），渲染层不参与，避免两套判定打架。
+  if (MAIN_HIT_TEST) return;
   const rect = hitRect();
   const inside =
     point.x >= rect.left && point.x <= rect.left + rect.width && point.y >= rect.top && point.y <= rect.top + rect.height;
@@ -588,6 +600,10 @@ function updateInteractivity(point) {
 
 // ── 事件 ──────────────────────────────────────────────────────────────────
 window.addEventListener('mousemove', (event) => {
+  // Windows：光标位置只认主进程的全局轮询（见 MAIN_HIT_TEST 的说明）。
+  // 真机实测：Windows 上经低级鼠标钩子转发的 mousemove 会给出过期/错误的坐标
+  // （窗口内时尤其明显），用它反而会让注视方向乱跳。
+  if (MAIN_HIT_TEST) return;
   state.cursor = { x: event.clientX, y: event.clientY };
   updateInteractivity(state.cursor);
 });

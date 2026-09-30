@@ -15,6 +15,8 @@ const {
   computeMetrics,
   clampToArea,
   petRectInWindow,
+  insetRect,
+  rectContains,
 } = require('./geometry.js');
 
 
@@ -33,6 +35,7 @@ const {
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { Socket } = require('node:net');
 const { app, BrowserWindow, Menu, ipcMain, nativeTheme, screen } = require('electron');
 
 // ── 进程外观：不进 Dock、不进 Cmd+Tab ──────────────────────────────────────
@@ -95,6 +98,8 @@ let interactive = false;
 let drag = null;
 /** 最近一次上报给宿主的位置，避免刷屏。 */
 let lastReported = null;
+/** 显示器变化监听是否已挂上（screen 是进程级单例，只需挂一次）。 */
+let displayWatchAttached = false;
 
 // ── 与宿主的 stdio JSON Lines 协议 ─────────────────────────────────────────
 function toHost(message) {
@@ -121,10 +126,37 @@ function defaultPosition() {
  *
  * 找哪块屏幕与具体几何限制分别由 `screen` 与 `geometry.clampToArea` 负责 ——
  * 后者是纯函数，所以限制逻辑本身有单元测试盯着（这个 bug 当初就是这么漏掉的）。
+ *
+ * 坐标系统一说明（Windows 适配后重点核对过）：
+ *   - `screen.getCursorScreenPoint()`、`display.workArea`、`win.getPosition/setPosition`
+ *     在**所有平台**都是 DIP（Windows 下 = 逻辑像素，等于物理像素 / 该屏缩放）；
+ *   - 渲染层的 `window.innerWidth/innerHeight` 也是 CSS 像素 = DIP。
+ *   因此宿主存的 `settings.position` 与这里的计算天然同坐标系，
+ *   100% / 125% / 150% 混合缩放与负坐标副屏都不需要换算。
  */
 function clampToDisplay(x, y) {
   const area = screen.getDisplayNearestPoint({ x, y }).workArea;
   return clampToArea(x, y, metrics, scale, area);
+}
+
+/**
+ * 显示环境变化后，把窗口重新夹回最近的显示区。
+ *
+ * 覆盖三种真实场景：
+ *   - 拔掉 / 接入副屏（窗口原来停留的那块屏没了）；
+ *   - 任务栏位置或大小变化（工作区变了，宠物可能被压在任务栏下面）；
+ *   - 缩放比变化（125% ↔ 150%）。
+ * 位置记忆仍然保留：只是把越界的坐标收回来，不做重置。
+ */
+function reclampToNearestDisplay() {
+  if (win === null || win.isDestroyed()) return;
+  const [x, y] = win.getPosition();
+  const target = clampToDisplay(x, y);
+  if (target.x !== x || target.y !== y) {
+    win.setPosition(target.x, target.y);
+    reportPosition();
+    emitLayout();
+  }
 }
 
 function createWindow() {
@@ -162,18 +194,25 @@ function createWindow() {
 
   win.setAlwaysOnTop(true, 'floating');
   if (process.platform === 'darwin') {
+    // macOS 专用：跨所有 Space（含全屏 Space）。
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  } else {
-    win.setVisibleOnAllWorkspaces(true);
   }
+  // Windows 不调用 setVisibleOnAllWorkspaces()：该 API 在 Windows 上没有任何效果
+  // （窗口的「所有虚拟桌面可见」由 WS_EX_TOOLWINDOW + 置顶近似），依赖它只会
+  // 制造「以为设置了」的假象。置顶语义由 alwaysOnTop + WS_EX_TOPMOST 提供。
   win.setMenuBarVisibility(false);
   // 默认整窗点击穿透；只有宠物身体上才接管鼠标。
   win.setIgnoreMouseEvents(true, { forward: true });
   interactive = false;
 
   win.once('ready-to-show', () => {
+    // showInactive()：显示但不激活 —— 两个平台的编辑器焦点都不会被抢走。
+    // （Windows 真机实测：showInactive 之后 isFocused() 保持 false，
+    //   只有显式 show()/focus() 才会变成 true。）
     win.showInactive();
     startCursorTracking();
+    // Windows：由主进程按全局光标自己算命中区（见「点击穿透」一节）。
+    startHitTestTracking();
     emitLayout();
     // 带上窗口的**实际**位置：`clampToDisplay` 之后系统可能不完全照办，
     // 排「拖不上去」这类问题时，有这个值才能分清是限制算错了还是系统不认。
@@ -193,6 +232,14 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
   });
+
+  // 显示器热插拔 / 工作区变化监听只需挂一次（screen 是进程级单例）。
+  if (!displayWatchAttached) {
+    displayWatchAttached = true;
+    screen.on('display-removed', reclampToNearestDisplay);
+    screen.on('display-added', reclampToNearestDisplay);
+    screen.on('display-metrics-changed', reclampToNearestDisplay);
+  }
 
   win.on('moved', reportPosition);
 
@@ -255,6 +302,26 @@ function reportPosition() {
 }
 
 // ── 点击穿透 ──────────────────────────────────────────────────────────────
+//
+// 两个平台的可交互判定方式不同：
+//
+// - **macOS**：`setIgnoreMouseEvents(true, {forward:true})` 会把 mouse-move
+//   稳定地转发给渲染进程，渲染层自己按命中区算，再回调 `pet:set-interactive`。
+// - **Windows**：Electron 的转发走的是 `WH_MOUSE_LL` 低级鼠标钩子，真机实测
+//   **不可靠** —— 同一份代码有时收得到 mousemove、有时完全收不到
+//   （与 electron/electron#33281 描述的「某些前台窗口下转发失效」一致）。
+//   桌宠不能建立在这种随机性上，于是 Windows 改由**主进程**按全局光标位置
+//   自己算命中区（`screen.getCursorScreenPoint()` 是可靠的原生调用，
+//   和眼睛跟随用的是同一条路），再用同一条 `setInteractive` 切穿透。
+//   渲染层只需要在素材加载后上报一次 alpha 命中内缩比例。
+const USE_MAIN_HIT_TEST = process.platform === 'win32';
+
+/** 命中区轮询间隔。40ms 内人手点不到宠物是极小概率；同时保持 CPU 占用极低。 */
+const HIT_TEST_INTERVAL_MS = 40;
+
+/** 渲染层上报的命中区内缩比例（素材 alpha 包围盒）。 */
+let hitInset = null;
+
 function setInteractive(next) {
   if (win === null || win.isDestroyed() || interactive === next) return;
   interactive = next;
@@ -265,6 +332,46 @@ function setInteractive(next) {
     // 穿透，但仍然把 mousemove 转发给渲染进程，宠物才能继续追踪光标。
     win.setIgnoreMouseEvents(true, { forward: true });
   }
+}
+
+/** 宠物命中区在窗口坐标系（CSS 像素 = DIP）里的矩形。 */
+function currentHitRect() {
+  if (hitInset === null) return null;
+  return insetRect(petRectInWindow(metrics, scale), hitInset);
+}
+
+/**
+ * Windows 命中判定：全局光标落在命中区里就接管鼠标。
+ * 拖拽中强制保持可交互，否则鼠标一离开身体就断线。
+ */
+function tickHitTest() {
+  if (win === null || win.isDestroyed()) return;
+  if (drag !== null) {
+    setInteractive(true);
+    return;
+  }
+  const rect = currentHitRect();
+  if (rect === null) {
+    setInteractive(false);
+    return;
+  }
+  const cursor = screen.getCursorScreenPoint();
+  const [wx, wy] = win.getPosition();
+  setInteractive(rectContains({ x: cursor.x - wx, y: cursor.y - wy }, rect));
+}
+
+let hitTestTimer = null;
+
+function startHitTestTracking() {
+  if (!USE_MAIN_HIT_TEST || hitTestTimer !== null) return;
+  hitTestTimer = setInterval(tickHitTest, HIT_TEST_INTERVAL_MS);
+  hitTestTimer.unref?.();
+}
+
+function stopHitTestTracking() {
+  if (hitTestTimer === null) return;
+  clearInterval(hitTestTimer);
+  hitTestTimer = null;
 }
 
 // ── 拖拽 ──────────────────────────────────────────────────────────────────
@@ -384,7 +491,21 @@ ipcMain.handle('pet:load-assets', async () => {
   }
 });
 
-ipcMain.on('pet:set-interactive', (_event, next) => setInteractive(next === true));
+ipcMain.on('pet:set-interactive', (_event, next) => {
+  // Windows 的穿透状态由主进程的命中区轮询决定，渲染层的判定不参与，
+  // 否则两个来源会互相打架（一个说进、一个说出）。
+  if (USE_MAIN_HIT_TEST) return;
+  setInteractive(next === true);
+});
+ipcMain.on('pet:hit-inset', (_event, value) => {
+  // 渲染层加载完素材后上报一次 alpha 命中内缩比例。
+  if (value === null || typeof value !== 'object') return;
+  const clamp01 = (input) => Math.min(1, Math.max(0, Number(input)));
+  const inset = { left: clamp01(value.left), top: clamp01(value.top), right: clamp01(value.right), bottom: clamp01(value.bottom) };
+  if (![inset.left, inset.top, inset.right, inset.bottom].every(Number.isFinite)) return;
+  hitInset = inset;
+  if (USE_MAIN_HIT_TEST) tickHitTest();
+});
 ipcMain.on('pet:drag-start', (_event, payload) => beginDrag(payload));
 ipcMain.on('pet:drag-end', () => endDrag());
 ipcMain.on('pet:context-menu', () => showContextMenu());
@@ -479,16 +600,20 @@ function dispatch(message) {
   }
 }
 
-// ── stdin：来自宿主的 JSON Lines ──────────────────────────────────────────
+// ── stdin / 控制管道：来自宿主的 JSON Lines ──────────────────────────────
 //
-// 注意：只有在「确实收到过宿主数据」之后，stdin 关闭才意味着宿主消失。
+// 注意：只有在「确实收到过宿主数据」之后，下行通道关闭才意味着宿主消失。
 // 独立运行（stdin 是 /dev/null 或直接关闭）时不能自退，否则窗口会在启动
 // 过程中被自己杀掉。
+//
+// Windows 不走 stdin：Chromium 在 GUI 进程启动时会重置继承来的 fd 0，
+// 实测 `process.stdin` 立即 EOF、宿主写什么都不会送达。宿主因此改走
+// subprocess seam 的 control pipe（fd 7）；这里按官方
+// `openInheritedControlChannel()` 的同一实现（new Socket({ fd: 7, ... })）打开。
 let stdinBuffer = '';
 let sawHostData = false;
 
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
+function onHostChunk(chunk) {
   sawHostData = true;
   stdinBuffer += chunk;
   let index = stdinBuffer.indexOf('\n');
@@ -504,22 +629,35 @@ process.stdin.on('data', (chunk) => {
     }
     index = stdinBuffer.indexOf('\n');
   }
-});
+}
 
 function hostGone() {
   if (!sawHostData) return; // 从来没有宿主，说明是独立运行
   quit();
 }
 
-process.stdin.on('end', hostGone);
-process.stdin.on('close', hostGone);
-process.on('disconnect', hostGone);
+if (process.platform === 'win32' && process.env.DSH_SUBPROCESS_CONTROL === 'pipe') {
+  // 受管启动：宿主给了控制管道。
+  const channel = new Socket({ fd: 7, readable: true, writable: true, allowHalfOpen: true });
+  channel.setEncoding('utf8');
+  channel.on('data', onHostChunk);
+  channel.on('end', hostGone);
+  channel.on('close', hostGone);
+  channel.on('error', hostGone); // 独立运行时 fd 7 无效 → 这里静默失败即可
+} else {
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', onHostChunk);
+  process.stdin.on('end', hostGone);
+  process.stdin.on('close', hostGone);
+  process.on('disconnect', hostGone);
+}
 
 let quitting = false;
 function quit() {
   if (quitting) return;
   quitting = true;
   stopCursorTracking();
+  stopHitTestTracking();
   try {
     win?.destroy();
   } catch {

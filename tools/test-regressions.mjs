@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { PassThrough } from 'node:stream';
 import { execFile } from 'node:child_process';
@@ -151,7 +152,7 @@ try {
   }
 
   const result = await promisify(execFile)(process.execPath, ['tools/ensure-electron.mjs'], {
-    cwd: new URL('..', import.meta.url).pathname,
+    cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: { ...process.env, DSH_HOME: home, DSH_DESKPET_ELECTRON: process.execPath },
   });
   assert.match(result.stdout, /已就绪/);

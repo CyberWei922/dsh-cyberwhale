@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('petHost', {
     scale: Number(process.env.DSH_DESKPET_SCALE ?? '1') || 1,
     lookAtCursor: process.env.DSH_DESKPET_LOOK !== '0',
     bubbles: process.env.DSH_DESKPET_BUBBLES !== '0',
+    // Windows 上穿透判定由主进程负责（见 helper/main.js 的说明），
+    // 渲染层据此不再自己驱动 setInteractive。
+    platform: process.platform,
   },
 
   /** 读取素材（pet.json + 图集字节）。返回结构化克隆对象。 */
@@ -20,6 +23,9 @@ contextBridge.exposeInMainWorld('petHost', {
 
   /** 告诉主进程：现在鼠标是不是在宠物身体上（决定要不要接管点击）。 */
   setInteractive: (next) => ipcRenderer.send('pet:set-interactive', next === true),
+
+  /** 上报命中区内缩比例（由素材 alpha 包围盒算出）；Windows 主进程用它做命中判定。 */
+  reportHitInset: (inset) => ipcRenderer.send('pet:hit-inset', inset),
 
   /** 拖拽窗口。 */
   dragStart: (payload) => ipcRenderer.send('pet:drag-start', payload ?? {}),
