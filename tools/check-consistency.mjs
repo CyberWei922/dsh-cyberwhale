@@ -21,7 +21,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { estimateRowShifts, ROW_SPECS } from './assemble-atlas.mjs';
-import { decodePng } from './lib/png.mjs';
+import { alphaBounds, decodePng } from './lib/png.mjs';
 
 /** 平均偏差的目标上限。超过就说明帧间还有肉眼可见的差异。 */
 const GOOD_AVERAGE = 10;
@@ -29,6 +29,41 @@ const GOOD_AVERAGE = 10;
 const GOOD_WORST = 16;
 /** 「离群帧」判定：超过平均值的这个倍数。 */
 const OUTLIER_RATIO = 1.35;
+
+/**
+ * 尺寸一致性阈值。
+ *
+ * 为什么单独查这个：动画里最刺眼的不是"画得不一样"，而是**角色被放大缩小**。
+ * 实测上一版同一动作内头部宽度最大差了 76px（27%），播放起来就是在缩放。
+ * 而高度其实一直很稳（≤2px），所以**头部宽度是关键指标**。
+ */
+const SIZE_LIMITS = {
+  /** 同行内角色高度的最大差（px）。 */
+  heightSpread: 4,
+  /** 同行内角色水平中轴的最大偏移（px）。 */
+  centerSpread: 3,
+  /** 同行内脚底（最低点）的最大差（px）。 */
+  bottomSpread: 3,
+  /** 同行内头部可见宽度的最大差（px）—— 人眼用它判断角色大小。 */
+  headWidthSpread: 15,
+};
+
+/** 量一个水平带的宽度（距内容底边 h0~h1 像素）。 */
+function bandWidth(image, bounds, h0, h1) {
+  const y0 = Math.max(0, bounds.bottom - h0);
+  const y1 = Math.min(image.height - 1, bounds.bottom - h1);
+  let minX = image.width;
+  let maxX = -1;
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (image.data[(y * image.width + x) * 4 + 3] > 128) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+    }
+  }
+  return maxX < 0 ? 0 : maxX - minX + 1;
+}
 
 /**
  * 这些动作**本来就该大幅改变姿态**，帧间差异大是设计如此，不是不一致。
@@ -143,6 +178,23 @@ async function main() {
 
     const shifts = estimateRowShifts(files);
     const devs = deviationFromConsensus(files, shifts);
+
+    // ── 尺寸一致性 ──────────────────────────────────────────────────────
+    const boundsList = files.map((frame) => alphaBounds(frame.image));
+    const heights = boundsList.map((bounds) => bounds.height);
+    const centers = boundsList.map((bounds) => (bounds.left + bounds.right) / 2);
+    const bottoms = boundsList.map((bounds) => bounds.bottom);
+    // 头部带：距内容底边 320~478（角色总高约 477）
+    const headWidths = files.map((frame, index) => bandWidth(frame.image, boundsList[index], 478, 320));
+    const spread = (values) => Math.max(...values) - Math.min(...values);
+    const size = {
+      heightSpread: spread(heights),
+      centerSpread: spread(centers),
+      bottomSpread: spread(bottoms),
+      headWidthSpread: spread(headWidths),
+      bounds: boundsList,
+      headWidths,
+    };
     const average = devs.reduce((a, b) => a + b, 0) / devs.length;
     const worst = Math.max(...devs);
     const best = devs.indexOf(Math.min(...devs));
@@ -159,11 +211,17 @@ async function main() {
       baselineIndex: best,
       outliers,
       devs,
+      size,
       poseChanging: POSE_CHANGING_ROWS.has(spec.name),
       ok: POSE_CHANGING_ROWS.has(spec.name)
-        // 姿态本就要变：只要求「没有哪一帧明显比别人更离群」
-        ? worst <= average * OUTLIER_RATIO || outliers.length === 0
-        : average <= GOOD_AVERAGE && worst <= GOOD_WORST,
+        // 姿态本就要变：只要求「没有哪一帧明显比别人更离群」，尺寸也不查（跳跃要上下移动）
+        ? (worst <= average * OUTLIER_RATIO || outliers.length === 0)
+        : average <= GOOD_AVERAGE
+          && worst <= GOOD_WORST
+          && size.heightSpread <= SIZE_LIMITS.heightSpread
+          && size.centerSpread <= SIZE_LIMITS.centerSpread
+          && size.bottomSpread <= SIZE_LIMITS.bottomSpread
+          && size.headWidthSpread <= SIZE_LIMITS.headWidthSpread,
     });
   }
 
@@ -173,13 +231,17 @@ async function main() {
     console.log(`\n帧目录：${dir}`);
     console.log(`阈值：平均 ≤ ${GOOD_AVERAGE}，单帧 ≤ ${GOOD_WORST}（0~255 的逐像素平均色差）`);
     console.log(`标 * 的动作姿态本来就该大幅变化（${[...POSE_CHANGING_ROWS].join('、')}），只检查"有没有哪一帧特别离群"\n`);
-    console.log('动作'.padEnd(15), '平均'.padStart(6), '最差'.padStart(6), ' 基准帧', ' 各帧偏差');
+    console.log('动作'.padEnd(15), '平均'.padStart(6), '最差'.padStart(6), '高度差'.padStart(7), '头宽差'.padStart(7), ' 基准帧', ' 各帧偏差');
     for (const row of report) {
       const mark = row.ok ? '✓' : '✗';
+      const sizeFlag = row.poseChanging
+        ? '     -'
+        : `${row.size.heightSpread.toFixed(0).padStart(6)} ${row.size.headWidthSpread.toFixed(0).padStart(6)}`;
       console.log(
         `${mark} ${row.displayName.padEnd(13)}${row.poseChanging ? '*' : ' '}`,
         row.average.toFixed(1).padStart(6),
         row.worst.toFixed(0).padStart(6),
+        sizeFlag.padStart(14),
         `#${row.baselineIndex}`.padStart(7),
         ' ' + row.devs.map((value) => value.toFixed(0)).join(' '),
       );
@@ -190,10 +252,28 @@ async function main() {
     if (failing.length === 0) {
       console.log('✓ 所有动作的帧间一致性都达标');
     } else {
-      console.log(`✗ ${failing.length} 个动作还没达标，建议重做的帧：`);
+      console.log(`✗ ${failing.length} 个动作还没达标：`);
       for (const row of failing) {
-        const targets = row.outliers.length > 0 ? row.outliers : [row.devs.indexOf(row.worst)];
-        console.log(`     ${row.displayName}：${targets.map((index) => `#${index}`).join('、')}`);
+        const reasons = [];
+        if (row.average > GOOD_AVERAGE || row.worst > GOOD_WORST) {
+          const targets = row.outliers.length > 0 ? row.outliers : [row.devs.indexOf(row.worst)];
+          reasons.push(`画得不一致 → 重做 ${targets.map((index) => `#${index}`).join('、')}`);
+        }
+        if (!row.poseChanging) {
+          if (row.size.headWidthSpread > SIZE_LIMITS.headWidthSpread) {
+            reasons.push(`**头部大小不一致**（差 ${row.size.headWidthSpread.toFixed(0)}px，上限 ${SIZE_LIMITS.headWidthSpread}）→ 整行重做`);
+          }
+          if (row.size.heightSpread > SIZE_LIMITS.heightSpread) {
+            reasons.push(`角色高度不一致（差 ${row.size.heightSpread.toFixed(0)}px）`);
+          }
+          if (row.size.centerSpread > SIZE_LIMITS.centerSpread) {
+            reasons.push(`角色左右位置不一致（差 ${row.size.centerSpread.toFixed(1)}px）`);
+          }
+          if (row.size.bottomSpread > SIZE_LIMITS.bottomSpread) {
+            reasons.push(`脚底位置不一致（差 ${row.size.bottomSpread.toFixed(0)}px）`);
+          }
+        }
+        console.log(`     ${row.displayName}：${reasons.join('；')}`);
       }
     }
   }
