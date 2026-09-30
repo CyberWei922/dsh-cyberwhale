@@ -6,8 +6,6 @@
 工作状态变化的蓝色大肥鲸桌宠。
 
 > 仓库：<https://github.com/CyberWei922/dsh-deskpet>
-> 本项目早期叫 `dsh-pet-whale`，已按仓库名统一改为 **`dsh-deskpet`**。
-> 从旧版本升级请看下面的[升级说明](#从旧名字升级)。
 
 - **桌面常驻**：透明、无边框、永远置顶、跨所有 Space，不抢编辑器焦点
 - **点击穿透**：默认整窗穿透，只有鲸鱼身体上才接管鼠标
@@ -54,57 +52,6 @@
 
 仓库还自带一个 `tools/make-placeholder-atlas.mjs`，可以在没有素材时生成一张纯几何的
 占位图集，方便先跑通功能。
-
----
-
-## 从旧名字升级
-
-包名从 `dsh-pet-whale` 改成了 `dsh-deskpet`。**profile 里的旧记录必须先改掉**，
-否则重启后 DSH 找不到旧 bundle，桌宠会静默不加载。
-
-**推荐做法 —— 一条命令：**
-
-```bash
-# 1. 完全退出 DSH（⌘Q，不是关窗口）
-
-# 2. 进到项目目录（重要：脚本用的是项目内相对路径）
-cd /path/to/dsh-deskpet
-
-# 3. 预演，确认要改什么
-node tools/migrate-profile.mjs
-
-# 4. 确认无误后写入
-node tools/migrate-profile.mjs --apply
-
-# 5. 重新打开 DSH
-```
-
-> 不想 `cd` 的话，用绝对路径也可以（脚本内部按自身位置解析依赖，与当前目录无关）：
-> `node /path/to/dsh-deskpet/tools/migrate-profile.mjs`
-
-脚本会一次性修好四处：`package.json` 的 bundle 列表与依赖、`node_modules` 软链、`pnpm-lock.yaml`。
-它会先检查 DSH 是否已退出，运行期不会写入。
-
-<details>
-<summary>不想用脚本？手动等价操作</summary>
-
-官方 CLI 路径：
-
-```bash
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop remove dsh-pet-whale
-"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
-  plugin --profile desktop add /path/to/dsh-deskpet
-```
-
-或者直接编辑 `~/.dsh/profiles/desktop/package.json`，把 `dsh-pet-whale` 换成
-`dsh-deskpet`（`dependencies` 与 `dsh.profile.bundles` 两处），再把
-`node_modules/dsh-pet-whale` 软链改名为 `dsh-deskpet`。
-
-</details>
-
-**你的设置不会丢**：插件启动时会自动把 `$DSH_HOME/dsh-pet-whale/` 整个目录
-改名为 `$DSH_HOME/dsh-deskpet/`，设置文件与已解包的 Electron 运行时都会一起接过来。
 
 ---
 
