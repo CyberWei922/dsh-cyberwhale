@@ -12,7 +12,11 @@
   <body>
     <div id="stage">
       <canvas id="pet"></canvas>
-      <div id="bubble"></div>
+      <!-- 两行：第一行会话标题，第二行任务状态（对应 DSH 聊天区那行灰字） -->
+      <div id="bubble">
+        <div id="bubble-title"></div>
+        <div id="bubble-status"></div>
+      </div>
       <div id="fallback"></div>
     </div>
     <script src="pet.js"></script>

@@ -86,6 +86,29 @@ body {
   --bubble-shadow: 0 6px 20px #0b152840;
 }
 
+/* 第一行：会话标题。次要信息，压暗一点、字号略小。 */
+#bubble-title {
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 标题为空时整行收掉，别在气泡里留一条空白 */
+#bubble-title[hidden] {
+  display: none;
+}
+
+/* 第二行：任务状态。这是气泡的主角，保持完整对比度。 */
+#bubble-status {
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #bubble[data-visible='1'] {
   opacity: 1;
   /* 默认气泡在头顶，出现时向上浮一点 */

@@ -391,9 +391,13 @@ function dispatch(message) {
   if (win === null || win.isDestroyed()) return;
   switch (message.t) {
     case 'bubble':
-      // 实时气泡内容由宿主提炼+节流后下发，这里只做转发。
+      // 两行气泡：`title` 会话标题、`status` 任务状态。都由宿主算好后下发，这里只转发。
+      // 两者都为空串表示清空实时层，让气泡回落到待机碎碎念。
       if (win !== null && !win.isDestroyed()) {
-        win.webContents.send('pet:bubble', typeof message.text === 'string' ? message.text : '');
+        win.webContents.send('pet:bubble', {
+          title: typeof message.title === 'string' ? message.title : '',
+          status: typeof message.status === 'string' ? message.status : '',
+        });
       }
       break;
     case 'state':

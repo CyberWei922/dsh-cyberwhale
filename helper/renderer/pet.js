@@ -71,6 +71,8 @@ const LOOK_FRAMES_PER_ROW = 8;
 // ── DOM ───────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('pet');
 const bubble = document.getElementById('bubble');
+const bubbleTitle = document.getElementById('bubble-title');
+const bubbleStatus = document.getElementById('bubble-status');
 const fallback = document.getElementById('fallback');
 const ctx = canvas.getContext('2d');
 
@@ -95,9 +97,10 @@ const state = {
   visualScale: host?.config?.scale ?? 1,
   bubbleKey: null,
   bubbleUntil: 0,
-  /** 宿主提炼好的实时进度句；空串表示没有，回落到碎碎念。 */
-  liveText: '',
-  /** 实时句的保留截止时间。上游不再更新时靠它回落。 */
+  /** 实时层的两行：会话标题 + 任务状态。status 为空表示没有，回落到碎碎念。 */
+  liveTitle: '',
+  liveStatus: '',
+  /** 兜底回落时间。正常由宿主在 turn 结束时明确清空，这个只是防上游异常消失。 */
   liveUntil: 0,
   /** 工作区在窗口坐标系里的矩形；由主进程下发，气泡靠它避让屏幕边缘。 */
   layout: null,
@@ -397,14 +400,33 @@ function draw(now) {
 }
 
 // ── 气泡 ──────────────────────────────────────────────────────────────────
-/** 实时进度句的保留时长：上游停更这么久之后回落到碎碎念。 */
-const LIVE_HOLD_MS = 12000;
+/**
+ * 实时层的兜底保留时长。
+ *
+ * 正常情况下宿主在 `turn/end` 时会明确清空，所以这个只用于「上游异常消失」
+ * （宿主进程挂了之类）时别让气泡永远停在旧状态上。
+ *
+ * 必须给得很宽松：一条命令跑十分钟是常事，用十几秒的话会在任务进行中
+ * 莫名其妙回落到碎碎念 —— 那比一直显示旧状态还糟。
+ */
+const LIVE_HOLD_MS = 10 * 60 * 1000;
 
-/** 只在内容真的变了时才写 DOM —— 这个函数每帧都会跑。 */
-function setBubbleText(text) {
-  if (bubble.textContent === text) return;
-  bubble.textContent = text;
-  bubbleSizeCache = null; // 文本变了，气泡尺寸要重新量
+let bubbleLinesKey = null;
+
+/**
+ * 写气泡的两行内容。只在内容真的变了时碰 DOM —— 这个函数每帧都会跑。
+ *
+ * @param title - 第一行：会话标题。空串时整行收掉，不留空白。
+ * @param status - 第二行：任务状态。
+ */
+function setBubbleLines(title, status) {
+  const key = `${title}\u0000${status}`;
+  if (key === bubbleLinesKey) return;
+  bubbleLinesKey = key;
+  bubbleTitle.textContent = title;
+  bubbleTitle.hidden = title === '';
+  bubbleStatus.textContent = status;
+  bubbleSizeCache = null; // 行数或文本变了，气泡尺寸要重新量
 }
 
 function hideBubble() {
@@ -422,16 +444,17 @@ function updateBubble(now) {
     return;
   }
 
-  // ── 实时层 ────────────────────────────────────────────────────────────
-  if (state.liveText !== '' && now < state.liveUntil) {
-    setBubbleText(state.liveText);
+  // ── 实时层：两行任务状态 ──────────────────────────────────────────────
+  if (state.liveStatus !== '' && now < state.liveUntil) {
+    setBubbleLines(state.liveTitle, state.liveStatus);
     bubble.dataset.live = '1';
     bubble.dataset.visible = '1';
     return;
   }
-  if (state.liveText !== '') {
+  if (state.liveStatus !== '') {
     // 上游不再更新了，回落
-    state.liveText = '';
+    state.liveStatus = '';
+    state.liveTitle = '';
     bubble.dataset.live = '0';
   }
 
@@ -451,7 +474,7 @@ function updateBubble(now) {
     // 基态只在切换时冒一次泡，不常驻。
     const pool = BUBBLES[state.animation];
     if (Array.isArray(pool) && pool.length > 0) {
-      setBubbleText(pool[Math.floor(Math.random() * pool.length)]);
+      setBubbleLines('', pool[Math.floor(Math.random() * pool.length)]);
       state.bubbleKey = key;
       state.bubbleUntil = now + 2600;
       bubble.dataset.visible = '1';
@@ -466,7 +489,7 @@ function updateBubble(now) {
 function announceTransient(animation) {
   const pool = BUBBLES[animation];
   if (!Array.isArray(pool) || pool.length === 0) return;
-  bubble.textContent = pool[Math.floor(Math.random() * pool.length)];
+  setBubbleLines('', pool[Math.floor(Math.random() * pool.length)]);
   state.bubbleUntil = performance.now() + 2600;
   bubble.dataset.visible = '1';
 }
@@ -583,12 +606,13 @@ host.onLayout((value) => {
   syncCanvas();            // 宠物底边可能变了，画布要跟着挪
 });
 
-host.onBubble((text) => {
-  const value = typeof text === 'string' ? text.trim() : '';
-  state.liveText = value;
-  // 留一点余量：上游按最小 3 秒的节奏推，停更 12 秒才回落成碎碎念。
-  state.liveUntil = value === '' ? 0 : performance.now() + LIVE_HOLD_MS;
-  if (value === '') bubble.dataset.live = '0';
+host.onBubble((payload) => {
+  // 宿主发来的两行任务状态：第一行会话标题，第二行「正在运行命令 · npm test」。
+  // status 为空串表示清空，回落到碎碎念。
+  state.liveTitle = typeof payload?.title === 'string' ? payload.title : '';
+  state.liveStatus = typeof payload?.status === 'string' ? payload.status : '';
+  state.liveUntil = state.liveStatus === '' ? 0 : performance.now() + LIVE_HOLD_MS;
+  if (state.liveStatus === '') bubble.dataset.live = '0';
 });
 
 host.onConfig((config) => {
@@ -597,7 +621,8 @@ host.onConfig((config) => {
   if (typeof config.bubbles === 'boolean') {
     state.bubbles = config.bubbles;
     if (!config.bubbles) {
-      state.liveText = '';
+      state.liveTitle = '';
+      state.liveStatus = '';
       state.liveUntil = 0;
     }
   }

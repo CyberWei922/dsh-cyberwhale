@@ -277,6 +277,32 @@ node tools/assemble-atlas.mjs <帧目录> --key FF00FF   # 源图是实色底时
 规格见 [图集规格](docs/pet-asset-spec.md) 第 2 节（角色尺寸与安全区）
 与第 7 节（生产工具）；给绘图端的任务书是 [逐格动作与视线表](docs/pet-sprite-task-brief.md)。
 
+### 气泡内容：任务状态（两行）
+
+气泡显示的不是「模型在想什么」，而是「它现在在干什么」—— 复现 DSH 聊天区那行灰字：
+
+```
+┌────────────────────────────────────┐
+│ 重制任务书                          │  ← 第一行：会话标题
+│ 正在运行命令 · npm test             │  ← 第二行：任务状态
+└────────────────────────────────────┘
+```
+
+那行灰字是 DSH 的 i18n 词典（`message.stepProcess.*`）。**这里不读词典、也不爬前端** ——
+状态可以从宿主已经收到的事件完整重算：
+
+| 事件 | 用途 |
+|---|---|
+| `session/title` | 第一行的会话标题 |
+| `agent/assistant-stream` 的 `tool-call-delta`（带 `name`）| 「准备运行命令」阶段 |
+| `tool/call` 的 `name` | 类别（命令 / 读文件 / 搜索 / 网页 / 子智能体…）|
+| `tool/call` 的 `arguments` | 「· npm test」那截细节 |
+| `tool/result` | 回落到「正在分析请求」|
+| `turn/end` | 清空，回落到待机碎碎念 |
+
+词表与工具名映射是逐条核对 DSH 实现抄来的，测试会**直接读 DSH 的 app.asar 词典做逐字对照**
+（读不到时自动跳过，换机器不会误报）。见 `lib/activity.js` 与 `tools/test-activity.mjs`。
+
 ### 气泡避让（借鉴 ChatGPT 桌宠）
 
 气泡不会傻待在宠物头顶：

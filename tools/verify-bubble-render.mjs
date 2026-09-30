@@ -110,12 +110,14 @@ function measureContrast(file, yFrom, yTo) {
 
 await sleep(6500);
 const shots = [
-  { name: 'short', text: '读取配置' },
-  { name: 'long', text: '正在检查渲染层的锚定逻辑' },
-  { name: 'empty', text: '' },
+  { name: 'short', status: '读取配置' },
+  { name: 'long', status: '正在运行命令 · npm test' },
+  // 两行：第一行会话标题，第二行状态
+  { name: 'two', title: '重制任务书', status: '正在运行命令 · npm test' },
+  { name: 'empty', status: '' },
 ];
 for (const shot of shots) {
-  send({ t: 'bubble', text: shot.text });
+  send({ t: 'bubble', title: shot.title ?? '', status: shot.status });
   await sleep(350);
   send({ t: 'capture', path: `${dir}/${shot.name}.png` });
   await sleep(700);
@@ -126,10 +128,10 @@ for (const shot of shots) {
 // 所以量测带要按它算，不能再写死数字 —— 窗口高度变过一次，写死的带子就落到宠物身上了。
 const PET_TOP_CSS = Math.round((metrics.height - metrics.petHeight) / 2);
 const BAND = [0, Math.max(40, PET_TOP_CSS * 2 - 4)]; // 设备像素（dpr=2）
-console.log('气泡带内容（设备像素 y 360~460）：\n');
+console.log('气泡带内容：\n');
 for (const shot of shots) {
   const m = measure(`${dir}/${shot.name}.png`, BAND[0], BAND[1]);
-  console.log(`  ${shot.name.padEnd(6)} 文本=${JSON.stringify(shot.text).padEnd(30)} 像素 ${String(m.count).padStart(6)}  宽 ${String(m.width).padStart(4)}  中心色 ${m.center}`);
+  console.log(`  ${shot.name.padEnd(6)} 状态=${JSON.stringify(shot.status).padEnd(34)} 像素 ${String(m.count).padStart(6)}  宽 ${String(m.width).padStart(4)}  中心色 ${m.center}`);
 }
 const shortM = measure(`${dir}/short.png`, ...BAND);
 const longM = measure(`${dir}/long.png`, ...BAND);
@@ -145,7 +147,7 @@ for (const scheme of ['light', 'dark']) {
 
   // 实时层
   for (const shot of shots.slice(0, 2)) {
-    send({ t: 'bubble', text: shot.text });
+    send({ t: 'bubble', title: shot.title ?? '', status: shot.status });
     await sleep(300);
     const file = `${dir}/${scheme}-${shot.name}.png`;
     send({ t: 'capture', path: file });
@@ -165,7 +167,7 @@ for (const scheme of ['light', 'dark']) {
   // 这一层也必须验 —— 同一个"只改一个属性"的坑两边都踩得到。
   // 碎碎念是按「动画状态 × 6 秒分桶」冒泡的，单次不一定命中；
   // 换几个状态重试，直到量到内容为止。
-  send({ t: 'bubble', text: '' });
+  send({ t: 'bubble', title: '', status: '' });
   await sleep(200);
   let flavorFile = `${dir}/${scheme}-flavor.png`;
   let flavor = null;

@@ -305,7 +305,7 @@ function WhalePetSection(props) {
     row(
       'bubbles',
       '气泡提示',
-      '状态变化时轻轻冒一句气泡。',
+      '显示当前任务状态：第一行会话标题，第二行正在做什么。',
       h(Switch, {
         checked: bubbles,
         disabled: pending === 'bubbles' || !enabled,
