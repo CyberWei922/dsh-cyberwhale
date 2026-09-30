@@ -1,0 +1,23 @@
+# 让 git 统一按 LF 存放文本文件。
+#
+# 为什么必须有这个：Windows 的 git 默认把 LF 转成 CRLF。同学 clone 下来再提交时，
+# **每一个文本文件都会显示成"改过了"**（实际内容没变），diff 全是噪声、
+# 合并时到处冲突 —— 双端协作最先踩的就是这个坑。
+* text=auto eol=lf
+
+# 二进制文件不要做任何换行符转换（转了文件就坏了）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.avif binary
+*.icns binary
+*.zip binary
+*.tgz binary
+*.zstd binary
+
+# 锁文件与生成物在 diff / 语言统计里折叠掉
+pnpm-lock.yaml linguist-generated=true
+lib/client.js linguist-generated=true
+assets/spritesheet.png linguist-generated=true

@@ -1,6 +1,9 @@
+<img src="assets/portrait.png" alt="大肥鲸" width="180" align="right">
+
 # dsh-deskpet 🐋
 
-一只常驻 macOS 桌面、随 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 工作状态变化的蓝色大肥鲸桌宠。
+一只常驻桌面、随 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+工作状态变化的蓝色大肥鲸桌宠。
 
 > 仓库：<https://github.com/CyberWei922/dsh-deskpet>
 > 本项目早期叫 `dsh-pet-whale`，已按仓库名统一改为 **`dsh-deskpet`**。
@@ -8,14 +11,18 @@
 
 - **桌面常驻**：透明、无边框、永远置顶、跨所有 Space，不抢编辑器焦点
 - **点击穿透**：默认整窗穿透，只有鲸鱼身体上才接管鼠标
-- **状态联动**：思考 / 干活 / 等你确认 / 检查结果 / 完成 / 出错，六个状态跟着 Harness 走
-- **实时气泡**：把模型的推理流提炼成一句「当前在做什么」，按最小 3 秒的节奏显示
+- **状态联动**：待机 / 干活中 / 等你确认 / 检查结果 / 完成 / 出错 / 挥手 / 左右移动 /
+  16 个注视方向，跟着 Harness 的事件走
+- **两行气泡**：第一行**会话标题**，第二行**当前在干什么**
+  （`正在运行命令 · npm test`）—— 直接复现聊天区那行灰字，见[气泡内容](#气泡内容任务状态两行)
 - **眼睛跟随**：16 个注视方向。**只在待机时、且鼠标停在它身上**才生效，
-  最多看 10 秒，鼠标一移开立刻停 —— 规则对齐 Codex 桌宠
+  最多看 10 秒，鼠标一移开立刻停 —— 规则对齐 Codex 桌宠，见[注视规则](#注视规则对齐-codex-桌宠)
+- **气泡避让**：贴近屏幕边缘时自动翻转 / 让位，不溢出，见[气泡避让](#气泡避让借鉴-chatgpt-桌宠)
 - **独立设置页**：DSH 左侧设置里的「桌宠」页（最下方），开关 / 大小 / 状态一目了然
 - **随应用退出**：窗口是宿主插件的受管子进程，Harness 一退它就走
 
-> **平台**：仅 macOS（arm64 / x64）。Windows 与 Linux 未验证。
+> **平台**：macOS 已实机验证（arm64 / x64）。**Windows 适配进行中**，
+> 代码里的平台分支已经就位并可测（见[跨平台](#跨平台)）。
 > **实测环境**：DeepSeek Harness Desktop `0.2.0-rc.2`，macOS 15。
 
 ---
@@ -39,6 +46,11 @@
 | 9–10 | 16 个注视方向 | 0–7 |
 
 `assets/spritesheet.png` 是**正式图集**：73 帧、由散帧拼装而成（见下面「把散帧拼成图集」）。
+
+> **正在进行：形象重制。** 为了让帧与帧之间不再"穿帮"，正在按
+> [重制任务书](docs/pet-regeneration-brief.md) 重新生成整批素材 —— 数量会变成 71 帧
+> （干活中从 6 帧改成 4 帧"端碗扒饭"，左右移动沿用现有素材）。
+> 新素材到位前，这一节描述的是**当前图集**。
 
 仓库还自带一个 `tools/make-placeholder-atlas.mjs`，可以在没有素材时生成一张纯几何的
 占位图集，方便先跑通功能。
@@ -148,8 +160,8 @@ export DSH_DESKPET_ELECTRON="$HOME/Projects/MyApp/node_modules/electron/dist/Ele
 |---|---|
 | 拖动鲸鱼 | 移动窗口；左右拖动会播对应的走路动画 |
 | 右键 | 原生菜单：打个招呼 / 重置位置 / 重新加载素材 / 重新启动窗口 / 在设置里隐藏 / 查看设置文件 |
-| 鼠标在屏幕上移动 | 鲸鱼的眼睛跟着你转 |
-| 模型推理时 | 气泡显示当前进度（如「正在检查渲染层的锚定逻辑」）|
+| 鼠标移到它身上 | 鲸鱼转过来看你（**只在待机时**，最多 10 秒）|
+| 模型推理时 | 气泡显示会话标题 + 当前在干什么（如「正在运行命令 · npm test」）|
 | 设置 → 桌宠 | 开关、显示大小、眼睛跟随、气泡、状态、四个操作按钮 |
 
 设置存在 `$DSH_HOME/dsh-deskpet/settings.json`。
@@ -249,18 +261,113 @@ Host 子进程里，拿不到任何窗口 API（官方 `packages/**` 中 `Browse
 
 ---
 
+## 跨平台
+
+### 一个包，跑所有平台
+
+DSH 的插件清单里**没有"操作系统"这个字段** —— `dsh.client.platform` 指的是
+**渲染平台**（`web`），不是 OS。所以一个 bundle 就是一份代码，
+macOS / Windows / Linux 装的是同一个包，平台差异靠**运行时分支**处理。
+
+> 别为不同系统建两个包：官方没有平台分支机制，两个包反而要维护两套安装流程。
+
+### 关键是「同一份代码不要写死平台」
+
+`lib/electron-runtime.js` 里所有分支函数的 `platform` 都**可以注入**：
+
+```js
+binaryRelativePath(platform)          // darwin → .app 里的 Electron；win32 → electron.exe
+artifactSuffix(platform, arch)        // darwin-arm64 / win32-x64 / linux-arm64
+electronCacheRoot(env, platform)      // 三平台各自的 @electron/get 缓存位置
+extractionPlan(platform, zip, dest)   // darwin 用 ditto、win32 用 tar、linux 用 unzip
+```
+
+**为什么非要可注入**：如果把 `if (osPlatform() === 'win32')` 直接写进函数体，
+在 macOS 上就永远走不到 Windows 那条路 —— 而**"改好 Windows 弄坏 macOS"
+恰恰发生在这种测不到的地方**。
+
+### 验证：在任意平台上测所有平台
+
+```bash
+node tools/test-platform.mjs     # 66 项，覆盖 darwin / win32 / linux
+```
+
+它做三件事：
+
+1. **断言三条平台路径的具体结果**（二进制位置、产物名、缓存目录、解包命令）
+2. **检查平台覆盖完整性** —— 三个平台的结果必须互不相同，
+   否则说明有分支被写重了；未知平台必须**抛错**而不是静默兜底
+3. **真解包冒烟测试** —— 当前平台真的打一个 zip 再解开，验证内容一致
+
+> 在 macOS 上跑就能验出 Windows 那条路算得对不对。**改平台分支之前先跑它。**
+
+### 双端协作的约定
+
+| 约定 | 原因 |
+|---|---|
+| **Windows 适配开 `feat/windows` 分支**，别直接推 `main` | 避免和 macOS 侧的改动互相冲掉 |
+| **只新增 `win32` 分支，不要改 darwin 分支** | 平台分支是互斥的代码路径，"适配"应该只做加法 |
+| **别碰 `assets/`** | 图集是 3.4MB 二进制，冲突了**没法合并** |
+| `.gitattributes` 已强制 LF | Windows 的 git 默认转 CRLF，会把每个文件都变成"改过了" |
+
+拉取别人的改动之后，跑一遍就能知道有没有影响本机：
+
+```bash
+git pull
+npm test                       # 含平台测试
+pnpm verify:bubble-render      # 气泡配色 + 渲染（真机）
+pnpm verify:bubble-placement   # 气泡避让四个场景（真机）
+pnpm verify:gaze               # 注视规则 17 项（真机）
+```
+
+### 各平台现状
+
+| 项 | macOS | Windows | Linux |
+|---|---|---|---|
+| Electron 运行时定位 / 解包 | ✅ 实机验证 | ✅ 分支就位（未实机） | ✅ 分支就位（未实机） |
+| 窗口（透明 / 置顶 / 穿透） | ✅ 实机验证 | ⚠️ **待实机调** | ⚠️ 未验证 |
+| 孤儿进程清扫 | ✅ | ❌ **待实现**（现在直接返回空） | ✅ |
+| 注视 / 气泡 / 图集渲染 | ✅ | 平台无关 | 平台无关 |
+
+**Windows 上已知要补的**：
+
+1. `lib/orphans.js` —— `findMatchingProcesses` 在 win32 直接返回 `[]`，
+   残留窗口不会被自动清理。需要接 `tasklist` 或 `Get-CimInstance Win32_Process`。
+2. **窗口行为必须实机试**：`transparent + alwaysOnTop + setIgnoreMouseEvents(forward)`
+   在 Windows 上有已知差异（点击穿透时的事件转发不如 macOS 可靠；
+   透明窗口 + 硬件加速在某些显卡驱动下会出黑底）。
+3. `tools/verify-*.mjs` 里写死了 macOS 的应用路径，验证前需要抽成可配置。
+
+---
+
 ## 开发
 
 ```bash
 node client/build.mjs                   # 构建设置卡的客户端包
-node tools/test-host.mjs                # 宿主半的离线集成测试
-node tools/test-client.mjs              # 设置页的测试
-node tools/test-atlas.mjs               # 图集拼装的测试
 node tools/ensure-electron.mjs          # 准备 Electron 运行时
 node tools/check-consistency.mjs        # 检查各帧画得有多不一致（见下）
 node tools/make-placeholder-atlas.mjs   # 生成纯几何占位图集（无素材时用）
 
-npm test                                # 上面三个测试一次跑完
+npm test                                # 离线测试（392 项，一次跑完）
+```
+
+`npm test` 包含五套离线测试：
+
+| 测试 | 覆盖 |
+|---|---|
+| `test-host.mjs` | 宿主半的离线集成（事件 → 状态机 → 下发） |
+| `test-client.mjs` | 设置页 |
+| `test-atlas.mjs` | 图集拼装 + 帧数契约 |
+| `test-activity.mjs` | 任务状态文案（含与 DSH 词典逐字对照）|
+| `test-geometry.mjs` | 窗口 / 宠物几何与位置限制 |
+| `test-platform.mjs` | **跨平台分支**（darwin / win32 / linux）|
+
+另有三个**真机验证**（需要桌面环境，不进 `npm test`）：
+
+```bash
+pnpm verify:bubble-render      # 气泡配色对比度 + 渲染
+pnpm verify:bubble-placement   # 气泡避让四个场景
+pnpm verify:gaze               # 注视规则 17 项
 ```
 
 ### 把散帧拼成图集
@@ -421,14 +528,16 @@ docs/                   规格书与技术核实报告
 
 ## 已知限制
 
-- **仅 macOS**。Windows 侧 DSH 的 `subprocess-local` 会隐藏 GUI 子进程窗口，
-  需要另做方案。
+- **Windows 还在适配中。** 运行时定位 / 解包的分支已经就位并有测试，
+  但窗口行为（透明 / 置顶 / 点击穿透）和孤儿进程清扫还没在 Windows 上做实机调。
+  详见[跨平台](#跨平台)那一节。
 - 桌面常驻窗口由插件自行 spawn，**不是 DSH 官方承诺的能力**。它走的是公开的
   `ctx.subprocess` 服务契约、不违反任何约束，但未来若该 seam 收紧需要跟进适配。
 - 设置页的导航图标由 DSH 外壳**按分区 id 硬编码**（见 `SettingsRoot.tsx` 的
   `navIcon()`），未知 id 一律回落到通用齿轮。所以「桌宠」页拿不到自己的图标。
 - 形象素材为 AI 生成的二次元鲸鱼，版权归本仓库作者所有。
-- **窗口尺寸固定**（按最大档位 1.6 预留，335×479），缩放只改内容不窗口。
+- **窗口尺寸固定**（按最大档位 1.6 预留，335×597 —— 上下各留一块气泡空间，
+  让角色贴屏幕顶边时气泡能翻到脚底），缩放只改内容不窗口。
   这么做是为了避开 macOS 在透明窗口改尺寸时重分配绘制表面所导致的闪帧
   （表现为压在下面的窗口暗一下）。代价是小档位下窗口比宠物大 —— 但穿透按命中区
   翻转，指针一离开身体就恢复穿透，实际影响可忽略。
