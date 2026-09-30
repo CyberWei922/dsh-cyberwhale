@@ -413,7 +413,7 @@ function dispatch(message) {
       }
       break;
     case 'state':
-      win.webContents.send('pet:state', message.v);
+      win.webContents.send('pet:state', message.v, { restart: message.restart === true });
       break;
     case 'config':
       // 窗口尺寸固定，缩放只是把内容画大/画小（渲染层做缓动）。

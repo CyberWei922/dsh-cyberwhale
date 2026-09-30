@@ -29,7 +29,7 @@ contextBridge.exposeInMainWorld('petHost', {
   contextMenu: () => ipcRenderer.send('pet:context-menu'),
 
   /** 订阅宿主下发的状态。 */
-  onState: (listener) => ipcRenderer.on('pet:state', (_event, value) => listener(value)),
+  onState: (listener) => ipcRenderer.on('pet:state', (_event, value, options) => listener(value, options)),
   /** 订阅运行期配置变更。 */
   onConfig: (listener) => ipcRenderer.on('pet:config', (_event, value) => listener(value)),
   /** 订阅「重新加载素材」。 */

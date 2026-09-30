@@ -504,7 +504,9 @@ try {
     const block = /const ANIMATIONS = \{([\s\S]*?)\n\};/.exec(rendererSource)[1];
     const rendererRows = new Map();
 
-    for (const rawLine of block.split('\n')) {
+    // 多行显式帧序列也属于同一动作；重复播放的列不计为新素材帧。
+    const compactBlock = block.replace(/\{\s*row:([\s\S]*?)\}/g, (value) => value.replace(/\s+/g, ' '));
+    for (const rawLine of compactBlock.split('\n')) {
       const line = rawLine.trim().replace(/,$/, '');
       if (line === '' || line.startsWith('//')) continue;
 
@@ -514,7 +516,7 @@ try {
         const cols = /cols:\s*\[([^\]]*)\]/.exec(keyed[2])[1];
         rendererRows.set(row, {
           name: keyed[1],
-          count: cols.split(',').map((value) => value.trim()).filter(Boolean).length,
+          count: new Set(cols.split(',').map((value) => value.trim()).filter(Boolean)).size,
         });
         continue;
       }

@@ -41,10 +41,17 @@ function rowAnimation(row, count, frameMs, lastMs) {
 }
 
 const ANIMATIONS = {
-  idle: { row: 0, cols: [0, 1, 2, 3, 4, 5], durations: [280, 110, 110, 140, 140, 320] },
+  // 每 6 秒眨眼一次；延长睁眼停留，闭眼/睁开的过渡速度保持自然。
+  idle: { row: 0, cols: [0, 1, 2, 3, 4, 5], durations: [4400, 110, 110, 140, 140, 1100] },
   'running-right': rowAnimation(1, 8, 120, 220),
   'running-left': rowAnimation(2, 8, 120, 220),
-  waving: rowAnimation(3, 4, 140, 280),
+  // 起手 → 两次来回挥动 → 收手；一次性播放，结束后保持末帧等宿主回落。
+  waving: {
+    row: 3,
+    cols: [0, 1, 2, 1, 2, 1, 0, 3],
+    durations: [260, 340, 320, 320, 320, 340, 300, 400],
+    once: true,
+  },
   jumping: rowAnimation(4, 5, 140, 280),
   failed: rowAnimation(5, 8, 140, 240),
   waiting: rowAnimation(6, 6, 150, 260),
@@ -423,7 +430,8 @@ function currentAnimationFrame(now) {
 
   const animation = ANIMATIONS[state.animation] ?? ANIMATIONS.idle;
   const total = animation.durations.reduce((sum, value) => sum + value, 0);
-  let elapsed = (now - state.animationStartedAt) % total;
+  const age = Math.max(0, now - state.animationStartedAt);
+  let elapsed = animation.once ? Math.min(age, total - 1) : age % total;
 
   for (let index = 0; index < animation.durations.length; index += 1) {
     const duration = animation.durations[index];
@@ -633,10 +641,14 @@ function syncAnimation() {
   announceTransient(animation);
 }
 
-host.onState((animation) => {
+host.onState((animation, options) => {
   if (typeof animation !== 'string' || !(animation in ANIMATIONS)) return;
   state.hostAnimation = animation;
   syncAnimation();
+  if (options?.restart === true && state.dragDirection === null) {
+    state.animationStartedAt = performance.now();
+    announceTransient(animation);
+  }
 });
 
 host.onProbe(() => {

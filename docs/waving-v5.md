@@ -1,0 +1,11 @@
+# 自然招手
+
+按用户最终要求：保留原角色正常的短手臂比例，允许自然屈肘，挥动时弯曲程度基本保持，不用完全伸直，也不反复伸缩。抬手到脸旁小幅左右摆动，起手和收手各一次。
+
+使用内置 image_gen，以 `assets/portrait.png` 为参考重新生成。四帧源图保存在 `output/waving-v5/source.png`，动画预览为 `output/waving-v5/preview.gif`，运行时图集为 `assets/spritesheet.png`。仅第 3 行前四格更新，其余像素由安装工具逐行断言保持一致。
+
+上一轮完全锁直、过长的手臂素材已弃用，没有装入图集。6 秒待机眨眼和 2.6 秒单次招手时序保持。
+
+## 提示词
+
+Use case identity-preserve. Create a natural greeting sprite sheet of the EXACT blue-haired chibi whale maid in the reference portrait, FOUR full-body sprites on a transparent 2x2 equal-cell grid. Preserve original SHORT CHIBI ARM proportions, same sleeve length, head/body ratio, costume, blue hair, whale tail, apron emblem, face and rendering. IMPORTANT: do NOT lengthen the arms. Arm from shoulder to fingertips must be the same natural anatomical length as this reference, NOT longer than the original shoulder-to-hip distance. NO long arms, NO straight rigid limbs. She waves just like a relaxed human greeting: raise her right hand (viewer left) BESIDE her cheek, elbow rests comfortably bent about 100 to 120 degrees. Keep the SAME elbow bend and SAME upper-arm position and SAME limb segment lengths in BOTH wave extremes; palm and forearm sway softly SIDE TO SIDE with a small wrist tilt, hand stays near face. Do not pump arm up/down, do not extend and retract elbow, do not reach far outside body. Top-left pose0 preparation: hand halfway raised beside upper chest, relaxed bent elbow. Top-right pose1 outward greeting extreme: palm open beside viewer-left edge of cheek, relaxed bent elbow, palm tilts outward 15 degrees. Bottom-left pose2 inward greeting extreme: same raised palm a SMALL distance toward cheek (about one palm width horizontal shift), still outside face, fingertips at same height, elbow still bent 100-120 degrees, palm tilts inward15 degrees; same open eyes and smile, no nodding. Bottom-right pose3 recovery: original arms relaxed at sides, gentle smile. Character expresses warmth naturally with tiny shoulder participation, not mannequin stiffness. Feet and torso stable. FOUR poses are the same character, same body height/scale and ground baseline in EACH cell. EACH figure occupies only 70% of its cell height, at least 8% transparent padding around every complete tail, hair, hand and feet; nothing clipped. No floor shadows, no text, no grid lines, no props, true transparent alpha background.

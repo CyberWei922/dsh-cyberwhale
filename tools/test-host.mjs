@@ -334,6 +334,14 @@ sent.length = 0;
 await rpc('updateSettings', { bubbles: true });
 await sleep(30);
 check('重新打开气泡恢复当前任务', sent.filter((m) => m.t === 'bubble').at(-1)?.status, '正在分析请求');
+sent.length = 0;
+await rpc('command', { action: 'greeting' });
+await sleep(160);
+check('首次招呼请求重播动画', sent.filter((m) => m.t === 'state').at(-1)?.restart, true);
+sent.length = 0;
+await rpc('command', { action: 'greeting' });
+await sleep(160);
+check('连续招呼不会被相同状态去重吞掉', sent.filter((m) => m.t === 'state').at(-1)?.restart, true);
 autoReady = true;
 
 console.log('\n[5c] 孤儿进程清扫');
