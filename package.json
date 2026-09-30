@@ -30,7 +30,9 @@
     "atlas:install": "node tools/install-atlas.mjs",
     "prepare:electron": "node tools/ensure-electron.mjs",
     "build": "node tools/make-placeholder-atlas.mjs && node client/build.mjs",
-    "test": "node tools/test-host.mjs && node tools/test-client.mjs && node tools/test-atlas.mjs && node tools/test-bubble.mjs && node tools/test-geometry.mjs"
+    "test": "node tools/test-host.mjs && node tools/test-client.mjs && node tools/test-atlas.mjs && node tools/test-bubble.mjs && node tools/test-geometry.mjs",
+    "verify:bubble-placement": "node tools/verify-bubble-placement.mjs",
+    "verify:bubble-render": "node tools/verify-bubble-render.mjs"
   },
   "keywords": [
     "deepseek-harness",

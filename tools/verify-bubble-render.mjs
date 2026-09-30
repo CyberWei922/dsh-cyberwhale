@@ -20,9 +20,11 @@ import { readFileSync, rmSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
 import { decodePng } from './lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const metrics = computeMetrics(ENVELOPE_SCALE);
 const electron = `${process.env.HOME}/.dsh/dsh-deskpet/electron/Electron.app/Contents/MacOS/Electron`;
 const dir = '/tmp/bubble-shots';
 rmSync(dir, { recursive: true, force: true });
@@ -120,9 +122,10 @@ for (const shot of shots) {
 }
 // （退出放到所有抓帧之后）
 
-// 气泡在窗口顶部：scale=1 时窗口 335×479(CSS) → 670×958(设备像素)
-// 气泡大约在 CSS y 189~220 → 设备 y 378~440
-const BAND = [360, 460];
+// 气泡在宠物头顶。宠物在窗口里的位置由 geometry.js 决定（不在窗口底部），
+// 所以量测带要按它算，不能再写死数字 —— 窗口高度变过一次，写死的带子就落到宠物身上了。
+const PET_TOP_CSS = Math.round((metrics.height - metrics.petHeight) / 2);
+const BAND = [0, Math.max(40, PET_TOP_CSS * 2 - 4)]; // 设备像素（dpr=2）
 console.log('气泡带内容（设备像素 y 360~460）：\n');
 for (const shot of shots) {
   const m = measure(`${dir}/${shot.name}.png`, BAND[0], BAND[1]);

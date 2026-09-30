@@ -77,8 +77,29 @@ console.log('\n[1] 几何常量必须与渲染层一致');
   // 整个助手进程启动即崩。这个坑真踩过 —— 纯单元测试抓不到（它们直接
   // import geometry.js，从不加载 main.js），只有真机启动才发现。
   const beforeRequire = mainSource.slice(0, mainSource.indexOf("require('./geometry.js')"));
-  const earlyUses = ['clamp(', 'computeMetrics(', 'clampToArea('].filter((name) => beforeRequire.includes(name));
+  const earlyUses = ['clamp(', 'computeMetrics(', 'clampToArea(', 'petRectInWindow('].filter((name) =>
+    beforeRequire.includes(name),
+  );
   check('geometry 的解构在所有使用之前（否则启动即崩）', earlyUses.join(', '), '');
+
+  // 反向检查：geometry 导出的名字如果在 main.js 里被调用，就必须解构进来。
+  // 这个坑也真踩过 —— 用了 petRectInWindow 却忘了加进解构，
+  // main.js 里一调用就 `is not defined`，而单元测试照样全绿。
+  const geometryExportsSource = await readFile(new URL('../helper/geometry.js', import.meta.url), 'utf8');
+  const destructured = new Set(
+    (/const \{([\s\S]*?)\} = require\('\.\/geometry\.js'\)/.exec(mainSource)?.[1] ?? '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean),
+  );
+  const exported = [...(/module\.exports = \{([\s\S]*?)\};/.exec(geometryExportsSource)?.[1] ?? '').matchAll(/([A-Za-z_][A-Za-z0-9_]*)/g)]
+    .map((match) => match[1])
+    .filter((name) => !['module', 'exports'].includes(name));
+
+  const usedButNotImported = exported.filter(
+    (name) => !destructured.has(name) && new RegExp(`\\b${name}\\s*[(.]`, 'u').test(mainSource),
+  );
+  check('geometry 导出的名字若被 main.js 使用，就必须解构进来', usedButNotImported.join(', '), '');
 
   // 窗口包络必须 ≥ 允许的最大缩放，否则大档位下宠物会被固定尺寸的窗口裁掉。
   const { LIMITS } = await import('../lib/settings.js');
@@ -90,20 +111,55 @@ console.log('\n[2] 尺寸公式');
 {
   check('1.0 档窗口宽 220', computeMetrics(1.0).width, 220);
   check('1.6 档窗口宽 335', computeMetrics(1.6).width, 335);
-  check('1.6 档窗口高 479', computeMetrics(1.6).height, 479);
+  // 高度 = 宠物 + 上下边距 + 上下各一块气泡空间
+  check('1.6 档窗口高 597（含上下两块气泡空间）', computeMetrics(1.6).height, 597);
   check('窗口宽 = 宠物宽 + 2×MARGIN', computeMetrics(1.0).width, computeMetrics(1.0).petWidth + MARGIN * 2);
+  check(
+    '窗口高 = 宠物高 + 2×MARGIN + 2×气泡空间',
+    computeMetrics(1.0).height,
+    computeMetrics(1.0).petHeight + MARGIN * 2 + Math.round(BUBBLE_SPACE * 1.0) * 2,
+  );
 }
 
 // ── 宠物在窗口里的矩形 ────────────────────────────────────────────────────
-console.log('\n[3] 宠物在窗口里的矩形（底边居中）');
+console.log('\n[3] 宠物在窗口里的矩形（水平居中、垂直偏移恒定）');
 {
+  const tops = [];
   for (const scale of [0.7, 1.0, 1.6]) {
     const pet = petRectInWindow(windowMetrics, scale);
+    tops.push(pet.top);
     // 窗口宽与宠物宽的差值可能是奇数，整像素定位下无法精确居中，
     // 允许 0.5px —— 这是算术上的必然，不是 bug。
     const centering = Math.abs(pet.left + pet.width / 2 - windowMetrics.width / 2);
     check(`档位 ${scale}：水平居中（偏差 ${centering}px）`, centering <= 0.5, true);
-    check(`档位 ${scale}：底边距窗口底 ${MARGIN}`, pet.top + pet.height, windowMetrics.height - MARGIN);
+  }
+  // 这个偏移必须是常数：如果它随缩放变，改缩放时宠物会在屏幕上跳一下。
+  check('宠物相对窗口顶边的偏移不随缩放变', new Set(tops).size, 1);
+  check('偏移等于上方那块气泡空间 + 边距', tops[0], MARGIN + Math.round(BUBBLE_SPACE * ENVELOPE_SCALE));
+}
+
+console.log('\n[3b] 每个档位下气泡都要放得下（上下都能放）');
+{
+  // 气泡实际高度约 30px（一行 12.5px 文字 + 内边距）。这里用 40px 留足余量。
+  const BUBBLE_HEIGHT = 40;
+  const GAP = 8;
+  for (const scale of [0.7, 1.0, 1.6]) {
+    const pet = petRectInWindow(windowMetrics, scale);
+    const roomAbove = pet.top;
+    const roomBelow = windowMetrics.height - pet.top - pet.height;
+    const need = Math.round(BUBBLE_SPACE * scale) + GAP;
+    check(
+      `档位 ${scale}：头顶空间 ${roomAbove}px ≥ 需要 ${need}px`,
+      roomAbove >= need,
+      true,
+    );
+    check(
+      `档位 ${scale}：脚底空间 ${roomBelow}px ≥ 需要 ${need}px`,
+      roomBelow >= need,
+      true,
+    );
+    // 也要放得下真实气泡（约 40px）
+    check(`档位 ${scale}：能容纳实际气泡高度`, Math.min(roomAbove, roomBelow) >= BUBBLE_HEIGHT, true);
   }
 }
 
@@ -135,12 +191,13 @@ console.log('\n[5] 位置限制的回归（曾经"拖不上去"）');
 
   check('0.7 档也能把宠物拖到工作区最上方', petTopReachable, AREA.y);
 
-  // 旧公式是把窗口顶边限制在 area.y（`y >= area.y`）。
-  // 窗口是按最大档位预留的，0.7 档下宠物顶边距窗口顶边 319px，
-  // 于是宠物最高只到 area.y + 319 —— 那就是"卡在一个高度"的现象。
+  // 旧公式是把窗口顶边限制在 area.y（`y >= area.y`），而不是限制宠物。
+  // 窗口是按最大档位预留的，宠物相对窗口顶边有一个固定偏移
+  //（现在是 132px；两版几何之前宠物贴窗口底，偏移是 319px，问题更严重）。
+  // 于是宠物最高只能到 area.y + 偏移，看起来就是"卡在一个高度上不去"。
   const oldStylePetTop = Math.max(AREA.y, -99999) + petAt07.top;
   check('旧公式卡住的位置（宠物最高只能到这里）', oldStylePetTop, AREA.y + petAt07.top);
-  check('旧公式确实比修复后低很多（说明 bug 真实存在）', oldStylePetTop - AREA.y > 300, true);
+  check('旧公式确实比修复后低不少（说明 bug 真实存在）', oldStylePetTop - AREA.y > 100, true);
 
   // 窗口本身可以伸到屏幕外 —— 那是透明区域，看不见也不影响交互。
   check('窗口允许伸到工作区上方', clamped.y < AREA.y, true);

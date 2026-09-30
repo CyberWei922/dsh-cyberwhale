@@ -14,6 +14,7 @@ const {
   clamp,
   computeMetrics,
   clampToArea,
+  petRectInWindow,
 } = require('./geometry.js');
 
 
@@ -80,6 +81,7 @@ function applyScale(next) {
   if (Math.abs(clamped - scale) < 0.001) return;
 
   scale = clamped;
+  emitLayout();
   // 窗口几何没变，但把当前缩放回报给宿主，设置页与调试都用得上。
   // 转发给渲染进程由 dispatch 的 config 分支统一负责（只发一次）。
   toHost({ t: 'metrics', scale, ...metrics });
@@ -172,6 +174,7 @@ function createWindow() {
   win.once('ready-to-show', () => {
     win.showInactive();
     startCursorTracking();
+    emitLayout();
     // 带上窗口的**实际**位置：`clampToDisplay` 之后系统可能不完全照办，
     // 排「拖不上去」这类问题时，有这个值才能分清是限制算错了还是系统不认。
     const [actualX, actualY] = win.getPosition();
@@ -199,6 +202,44 @@ function createWindow() {
 /** 位置上报（防抖：拖动时窗口会连续 move，不能每次都写 stdout）。 */
 let reportTimer = null;
 
+/**
+ * 把「工作区在窗口坐标系里的矩形」发给渲染层。
+ *
+ * 气泡靠它决定：头顶放不下就翻到脚底；贴屏幕左边就往右让。
+ * 只发屏幕几何，不发像素 —— 气泡的实际摆放由渲染层算（它才知道气泡多大）。
+ *
+ * 节流 120ms：拖动时每帧都发没必要，但也不能太慢，否则气泡会让位不及时。
+ */
+let layoutTimer = null;
+
+function emitLayout() {
+  if (layoutTimer !== null) return;
+  layoutTimer = setTimeout(() => {
+    layoutTimer = null;
+    if (win === null || win.isDestroyed()) return;
+    const [wx, wy] = win.getPosition();
+    const center = { x: wx + Math.round(metrics.width / 2), y: wy + Math.round(metrics.height / 2) };
+    const area = screen.getDisplayNearestPoint(center).workArea;
+    // 宠物在窗口里的底边位置由**主进程**决定并下发。
+    // 为什么不让渲染层自己算：窗口是按最大档位预留的，宠物不在窗口底部，
+    // 两处各算一遍是重复事实来源 —— 曾经就是这里对不上，导致主进程以为宠物
+    // 在 y=132、渲染层实际画在 y=375，位置限制和气泡锚点全错。
+    const pet = petRectInWindow(metrics, scale);
+    win.webContents.send('pet:layout', {
+      left: area.x - wx,
+      top: area.y - wy,
+      right: area.x + area.width - wx,
+      bottom: area.y + area.height - wy,
+      width: metrics.width,
+      height: metrics.height,
+      // 宠物底边距窗口顶边的距离（CSS 像素）
+      petBottom: pet.top + pet.height,
+      scale,
+    });
+  }, 120);
+  layoutTimer.unref?.();
+}
+
 function reportPosition() {
   if (reportTimer !== null) return;
   reportTimer = setTimeout(() => {
@@ -208,6 +249,7 @@ function reportPosition() {
     if (lastReported !== null && lastReported.x === x && lastReported.y === y) return;
     lastReported = { x, y };
     toHost({ t: 'moved', x, y });
+    emitLayout();
   }, 400);
   reportTimer.unref?.();
 }
@@ -257,6 +299,7 @@ function tickDrag() {
 
   const target = clampToDisplay(cursor.x - drag.offsetX, cursor.y - drag.offsetY);
   win.setPosition(target.x, target.y);
+  emitLayout();
 }
 
 function endDrag() {
@@ -338,6 +381,10 @@ ipcMain.on('pet:renderer-error', (_event, message) => {
   toHost({ t: 'log', level: 'error', msg: String(message) });
 });
 ipcMain.on('pet:moved-by-user', () => reportPosition());
+// 渲染层对 pet:probe 的回答，转给宿主
+ipcMain.on('pet:probe-result', (_event, data) => {
+  toHost({ t: 'probe', ...(data ?? {}) });
+});
 
 // ── IPC：主进程 → 渲染进程（由 stdin 驱动）─────────────────────────────────
 function dispatch(message) {
@@ -374,6 +421,15 @@ function dispatch(message) {
       if (value === 'dark' || value === 'light' || value === 'system') {
         nativeTheme.themeSource = value;
       }
+      break;
+    }
+    case 'probe': {
+      // 调试用：让渲染层回报气泡与宠物的实际位置。
+      //
+      // 为什么不靠 executeJavaScript：实测它的 Promise 既不 resolve 也不 reject（静默卡住）。
+      // 为什么不靠 capturePage：窗口伸到屏幕外时合成器报 UnknownVizError 抓不到帧。
+      // 走自家 IPC 最稳，而且和其余消息同一条通路。
+      win.webContents.send('pet:probe');
       break;
     }
     case 'capture': {

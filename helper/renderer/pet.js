@@ -99,6 +99,8 @@ const state = {
   liveText: '',
   /** 实时句的保留截止时间。上游不再更新时靠它回落。 */
   liveUntil: 0,
+  /** 工作区在窗口坐标系里的矩形；由主进程下发，气泡靠它避让屏幕边缘。 */
+  layout: null,
 };
 
 // ── 素材加载 ───────────────────────────────────────────────────────────────
@@ -206,32 +208,120 @@ function syncCanvas() {
 
   canvas.style.width = `${CELL.width * state.visualScale}px`;
   canvas.style.height = `${CELL.height * state.visualScale}px`;
-  canvas.style.bottom = `${MARGIN}px`;
+  // 画布底边对齐「宠物底边」——位置来自主进程，不再假定宠物贴着窗口底部
+  const petBottom = state.layout?.petBottom ?? window.innerHeight - MARGIN;
+  canvas.style.bottom = `${window.innerHeight - petBottom}px`;
 }
 
-/** 宠物在窗口里的矩形（CSS 像素）：由当前视觉缩放推导，底边居中锚定，与 CSS 一致。 */
+/**
+ * 宠物在窗口里的矩形（CSS 像素）。
+ *
+ * **垂直位置由主进程下发**（`layout.petBottom`），不再自己按窗口底部算：
+ * 窗口是按最大档位预留的，宠物并不在窗口底部 —— 上下各留了一块气泡空间。
+ * 两边各算一遍就是两份事实来源，一旦漂移，位置限制和气泡锚点会同时错。
+ *
+ * 尺寸仍用 `visualScale`，因为缩放动画期间绘制尺寸是缓动的。
+ */
 function petRect() {
   const cssWidth = window.innerWidth;
-  const cssHeight = window.innerHeight;
   const petWidth = CELL.width * state.visualScale;
   const petHeight = CELL.height * state.visualScale;
+  const petBottom = state.layout?.petBottom ?? window.innerHeight - MARGIN;
   return {
     petLeft: (cssWidth - petWidth) / 2,
-    petTop: cssHeight - MARGIN - petHeight,
+    petTop: petBottom - petHeight,
     petWidth,
     petHeight,
   };
 }
 
 /** 气泡跟着宠物顶部走；只在位置真的变了时才写样式。 */
-let bubbleTopCache = null;
+/** 气泡与宠物之间的间隙（CSS 像素）。 */
+const BUBBLE_GAP = 8;
+/** 气泡与屏幕边缘的最小留白。 */
+const BUBBLE_EDGE = 6;
+/** 尾巴离气泡两端的最近距离，别让它指到气泡外面。 */
+const BUBBLE_TAIL_INSET = 18;
 
+let bubbleFrameCache = null;
+let bubbleSizeCache = null;
+
+/** 量气泡尺寸。文本变了才重量 —— 每帧读 offsetWidth 会触发布局抖动。 */
+function measureBubble() {
+  if (bubbleSizeCache === null) {
+    bubbleSizeCache = { width: bubble.offsetWidth, height: bubble.offsetHeight };
+  }
+  return bubbleSizeCache;
+}
+
+/**
+ * 摆放气泡。
+ *
+ * 两处避让（借鉴 ChatGPT 桌宠）：
+ *   1. **垂直翻转**：头顶放不下就翻到脚底
+ *   2. **水平让位**：贴近屏幕左右边缘时整体平移，不让气泡溢出
+ *
+ * 窗口是按最大档位预留的，上下各留了一块气泡空间（见 helper/geometry.js），
+ * 所以翻到下方有地方去。屏幕可视区由主进程下发（窗口本身可以伸到屏幕外）。
+ */
 function positionBubble() {
   const rect = petRect();
-  const top = Math.max(2, rect.petTop - BUBBLE_SPACE * state.visualScale + 6);
-  if (bubbleTopCache === top) return;
-  bubbleTopCache = top;
-  bubble.style.top = `${top}px`;
+  const layout = state.layout;
+  // 还没收到 layout 时退化成窗口自身，至少不会跑出窗口
+  const viewLeft = layout === null ? 0 : layout.left;
+  const viewTop = layout === null ? 0 : layout.top;
+  const viewRight = layout === null ? window.innerWidth : layout.right;
+  const viewBottom = layout === null ? window.innerHeight : layout.bottom;
+
+  const size = measureBubble();
+
+  // ── 垂直：优先头顶，放不下就翻到脚底 ────────────────────────────────
+  const aboveTop = rect.petTop - BUBBLE_GAP - size.height;
+  const belowTop = rect.petTop + rect.petHeight + BUBBLE_GAP;
+  const aboveFits = aboveTop >= viewTop + BUBBLE_EDGE;
+  const belowFits = belowTop + size.height <= viewBottom - BUBBLE_EDGE;
+
+  let side = 'above';
+  let top = aboveTop;
+  if (!aboveFits && belowFits) {
+    side = 'below';
+    top = belowTop;
+  } else if (!aboveFits && !belowFits) {
+    // 上下都放不下（极窄的可视区）：挑空间更大的一侧
+    const roomAbove = rect.petTop - viewTop;
+    const roomBelow = viewBottom - (rect.petTop + rect.petHeight);
+    if (roomBelow > roomAbove) {
+      side = 'below';
+      top = belowTop;
+    }
+  }
+  top = Math.min(Math.max(top, viewTop + BUBBLE_EDGE), viewBottom - BUBBLE_EDGE - size.height);
+
+  // ── 水平：以宠物中轴为中心，再夹进可视区 ────────────────────────────
+  const petCenter = rect.petLeft + rect.petWidth / 2;
+  let left = petCenter - size.width / 2;
+  left = Math.min(Math.max(left, viewLeft + BUBBLE_EDGE), viewRight - BUBBLE_EDGE - size.width);
+
+  // 尾巴指向宠物中轴，但夹在气泡内部
+  const tailX = Math.min(Math.max(petCenter - left, BUBBLE_TAIL_INSET), size.width - BUBBLE_TAIL_INSET);
+
+  const frame = { top: Math.round(top), left: Math.round(left), side, tailX: Math.round(tailX) };
+  const cached = bubbleFrameCache;
+  if (
+    cached !== null &&
+    cached.top === frame.top &&
+    cached.left === frame.left &&
+    cached.side === frame.side &&
+    cached.tailX === frame.tailX
+  ) {
+    return;
+  }
+
+  bubbleFrameCache = frame;
+  bubble.style.top = `${frame.top}px`;
+  bubble.style.left = `${frame.left}px`;
+  bubble.dataset.side = frame.side;
+  bubble.style.setProperty('--bubble-tail-x', `${frame.tailX}px`);
 }
 
 /** 命中矩形（已按 alpha 包围盒内缩）。 */
@@ -314,6 +404,7 @@ const LIVE_HOLD_MS = 12000;
 function setBubbleText(text) {
   if (bubble.textContent === text) return;
   bubble.textContent = text;
+  bubbleSizeCache = null; // 文本变了，气泡尺寸要重新量
 }
 
 function hideBubble() {
@@ -466,6 +557,30 @@ host.onState((animation) => {
   state.animation = animation;
   state.animationStartedAt = performance.now();
   announceTransient(animation);
+});
+
+host.onProbe(() => {
+  // 调试用：回报气泡与宠物的实际位置。量的是 getBoundingClientRect（视口坐标），
+  // 与窗口坐标系一致，比从截图里数像素可靠。
+  const rectOf = (element) => {
+    if (element === null) return null;
+    const r = element.getBoundingClientRect();
+    return { top: r.top, left: r.left, width: r.width, height: r.height };
+  };
+  host.reportProbe({
+    bubble: rectOf(bubble),
+    bubbleSide: bubble.dataset.side ?? null,
+    bubbleVisible: bubble.dataset.visible ?? null,
+    pet: rectOf(canvas),
+    window: { width: window.innerWidth, height: window.innerHeight },
+  });
+});
+
+host.onLayout((value) => {
+  if (value === null || typeof value !== 'object') return;
+  state.layout = value;
+  bubbleFrameCache = null; // 屏幕位置变了，重新摆一次
+  syncCanvas();            // 宠物底边可能变了，画布要跟着挪
 });
 
 host.onBubble((text) => {

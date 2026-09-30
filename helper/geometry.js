@@ -28,7 +28,7 @@ const BUBBLE_SPACE = 74;
  * 重建期间的那一帧可能被当作不透明合成 —— 压在窗口下面的东西（比如设置面板）
  * 就会暗一下。窗口尺寸固定后这件事根本不会发生。
  *
- * 代价是窗口远比小档位下的宠物大（0.7 档时窗口高 479、宠物只有 146），
+ * 代价是窗口远比小档位下的宠物大（0.7 档时窗口高 597、宠物只有 146），
  * 所以**任何和位置有关的计算都必须基于宠物矩形，而不是窗口矩形**。
  * 这也正是 Codex 的做法 —— 它的宠物窗口 384×400，而形象只有 112×121。
  */
@@ -48,11 +48,16 @@ function clamp(value, min, max) {
 function computeMetrics(value) {
   const petWidth = Math.round(CELL.width * value);
   const petHeight = Math.round(CELL.height * value);
+  const bubble = Math.round(BUBBLE_SPACE * value);
   return {
     petWidth,
     petHeight,
     width: petWidth + MARGIN * 2,
-    height: petHeight + MARGIN * 2 + Math.round(BUBBLE_SPACE * value),
+    // 宠物上下**各留一块**气泡空间。
+    //
+    // 只留上方是不够的：角色被拖到屏幕顶部时，气泡在头顶就会跑到屏幕外。
+    // 下面这块让气泡能翻到脚底。窗口尺寸本来就是固定的，多留一块不增加风险。
+    height: petHeight + MARGIN * 2 + bubble * 2,
   };
 }
 
@@ -68,7 +73,10 @@ function petRectInWindow(metrics, scale) {
   const petHeight = Math.round(CELL.height * scale);
   return {
     left: Math.round((metrics.width - petWidth) / 2),
-    top: metrics.height - MARGIN - petHeight,
+    // 宠物相对窗口顶边的偏移按**包络**算，是常数，不随缩放变。
+    // 如果让它随缩放变，改缩放时宠物会在屏幕上跳一下。
+    // 这个偏移等于上方那块气泡空间 + 外边距。
+    top: Math.round((metrics.height - metrics.petHeight) / 2),
     width: petWidth,
     height: petHeight,
   };
@@ -78,8 +86,8 @@ function petRectInWindow(metrics, scale) {
  * 把**宠物**限制在工作区内 —— 注意不是把窗口限制在工作区内。
  *
  * 踩过的坑：原来按窗口算，条件 `y >= area.y` 的意思是"窗口顶边不能高过屏幕顶边"。
- * 但宠物画在窗口底部，0.7 档时窗口高 479、宠物只有 146，于是宠物顶边
- * 永远到不了 `area.y + 319` 以上 —— 表现就是拖动向上"卡在一个高度"。
+ * 但宠物相对窗口顶边有一个固定偏移，于是宠物顶边永远到不了 `area.y` 以上
+ * —— 表现就是拖动向上"卡在一个高度"。
  *
  * 按宠物矩形算之后，窗口的透明部分可以伸到屏幕外（本来也看不见），
  * 宠物本身则始终完整停留在工作区内。

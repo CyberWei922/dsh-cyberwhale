@@ -1,0 +1,35 @@
+{
+  "source": "/Users/wei/Projects/dsh-deskpet/individual-draft/idle_01.png",
+  "output": "/Users/wei/Projects/dsh-deskpet/output/pet-regeneration/pixel-proof/idle_03.png",
+  "method": "Deterministic local composite; no AI-generated material used.",
+  "canvas": [
+    512,
+    560
+  ],
+  "mode": "RGBA",
+  "alpha_identical": true,
+  "source_alpha_bbox": [
+    82,
+    58,
+    428,
+    535
+  ],
+  "output_alpha_bbox": [
+    82,
+    58,
+    428,
+    535
+  ],
+  "height_px": 477,
+  "foot_y": 534,
+  "changed_pixels": 3172,
+  "changed_pixels_outside_mask": 0,
+  "change_bbox": [
+    170,
+    210,
+    297,
+    255
+  ],
+  "passed": true,
+  "scope": "Validates blinking/local editing only; does not validate waving or walking."
+}

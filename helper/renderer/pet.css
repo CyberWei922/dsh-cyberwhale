@@ -56,8 +56,11 @@ body {
   --bubble-ring: transparent;
 
   position: absolute;
-  left: 50%;
-  translate: -50% 0;
+  /* left / top 由 JS 写入（见 pet.js 的 positionBubble）——
+     气泡要按屏幕边缘翻转和让位，不能写死在 CSS 里 */
+  left: 0;
+  top: 0;
+  translate: 0 0;
   transform-origin: 50% 100%;
   max-width: calc(100% - 12px);
   padding: 7px 12px 8px;
@@ -85,20 +88,34 @@ body {
 
 #bubble[data-visible='1'] {
   opacity: 1;
-  translate: -50% -4px;
+  /* 默认气泡在头顶，出现时向上浮一点 */
+  translate: 0 -4px;
+}
+
+/* 角色贴屏幕顶边时气泡会翻到脚底，浮起方向跟着反过来 */
+#bubble[data-visible='1'][data-side='below'] {
+  translate: 0 4px;
 }
 
 /* 气泡的小尾巴 */
+/* 气泡的小尾巴。水平位置由 JS 通过 --bubble-tail-x 指定 ——
+   气泡让位之后不再以宠物为对称中心，尾巴必须跟着指回宠物中轴。 */
 #bubble::after {
   content: "";
   position: absolute;
-  left: 50%;
+  left: var(--bubble-tail-x, 50%);
   bottom: -5px;
   width: 9px;
   height: 9px;
   translate: -50% 0;
   border-radius: 50%;
   background: var(--bubble-bg);
+}
+
+/* 气泡翻到脚底时，尾巴改到气泡上方，朝上指 */
+#bubble[data-side='below']::after {
+  bottom: auto;
+  top: -5px;
 }
 
 @media (prefers-color-scheme: dark) {
