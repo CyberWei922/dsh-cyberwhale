@@ -114,8 +114,8 @@ pet-name/
 ```json
 {
   "id": "whale",
-  "displayName": "大肥鲸",
-  "description": "一只陪你在桌面上写代码的蓝色鲸鱼。",
+  "displayName": "大肥鱼",
+  "description": "一只陪你在桌面上写代码的蓝色大肥鱼。",
   "spriteVersionNumber": 2,
   "spritesheetPath": "spritesheet.webp"
 }

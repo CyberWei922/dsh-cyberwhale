@@ -211,5 +211,5 @@ node tools/assemble-atlas.mjs frames/ --out assets/spritesheet.png
 装配完装进桌宠：
 
 ```bash
-node tools/install-atlas.mjs assets/spritesheet.png --name whale --display "大肥鲸"
+node tools/install-atlas.mjs assets/spritesheet.png --name whale --display "大肥鱼"
 ```

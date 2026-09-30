@@ -1,7 +1,7 @@
 {
   "name": "dsh-cyberwhale",
   "version": "0.1.0",
-  "description": "一只常驻 macOS 桌面、随 DeepSeek Harness 状态变化的蓝色大肥鲸桌宠",
+  "description": "一只随 DeepSeek Harness 工作状态变化的蓝色大肥鱼桌宠",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

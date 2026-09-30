@@ -1,6 +1,6 @@
 # dsh-cyberwhale 🐋
 
-一只陪你使用 [DeepSeek Harness 官方 Desktop](https://github.com/deepseek-ai/deepseek-harness) 的鲸鱼少女桌宠。
+一只随 Harness 工作状态变化、陪你使用 [DeepSeek Harness 官方 Desktop](https://github.com/deepseek-ai/deepseek-harness) 的蓝色大肥鱼桌宠。
 
 - 随任务切换动作，气泡显示会话标题和当前进度。
 - 支持拖动、打招呼、调整大小和记住位置。
@@ -14,7 +14,9 @@
 
 ## 安装
 
-需要 [Harness Desktop](https://github.com/deepseek-ai/deepseek-harness) 和 [Node.js 22+](https://nodejs.org/)。先启动一次 Harness 完成初始化。
+需要 [Harness Desktop](https://github.com/deepseek-ai/deepseek-harness)。先启动一次 Harness 完成初始化。
+
+> 只有用下面的**命令行安装**才需要额外的 Node.js 22+ 和 `git`；应用内安装不需要它们 —— 安装、下载运行时都由 Harness 自己完成。
 
 **1. 在 Harness 里安装插件**
 
@@ -32,11 +34,11 @@
 
 **2. 准备运行环境**
 
-设置 → **桌宠** → **准备运行时**。桌宠需要一个独立的 Electron 运行时（约 110 MB），安装包里不含它；这一步从官方源下载并校验，官方源不通时会自动改用国内镜像。下载进度就在同一张卡上。
+桌宠需要一个独立的 Electron 运行时（100–150 MB，随平台而定），安装包里不含它。首次启动会**自动复用本机已有的 Electron 缓存**，缓存命中就什么都不用做；缓存里没有时，到 **设置 → 桌宠** 点 **准备运行时** —— 它会从官方源下载并校验，官方源不通时自动改用国内镜像，进度就在同一张卡上。
 
 **3. 启用桌宠**
 
-同一个设置页里打开**启用桌宠**，鲸鱼就会出现。
+同一个设置页里打开**启用桌宠**，大肥鱼就会出现。
 
 如果设置里没有「桌宠」，完全退出 Harness 再重新打开 —— 只关主窗口可能没有结束后台进程。
 

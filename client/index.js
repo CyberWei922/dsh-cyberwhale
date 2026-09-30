@@ -386,7 +386,7 @@ function WhalePetSection(props) {
     row(
       'enabled',
       '启用桌宠',
-      '一只常驻 macOS 桌面、随 Harness 工作状态变化的蓝色鲸鱼。',
+      '一只随 Harness 工作状态变化的蓝色大肥鱼。',
       h(Switch, {
         checked: enabled,
         disabled: pending === 'enabled',
@@ -413,7 +413,7 @@ function WhalePetSection(props) {
       ? row(
           'runtime',
           '运行环境',
-          '桌宠窗口需要 Electron 运行时（约 110 MB）。官方源不通时会自动改用国内镜像。',
+          '桌宠窗口需要 Electron 运行时（100–150 MB，随平台而定）。官方源不通时会自动改用国内镜像。',
           runtimeControl,
           prepareFailed ? prepare?.error ?? null : null,
         )

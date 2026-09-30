@@ -8,7 +8,7 @@
  * 不依赖任何图像库：PNG 读 IHDR，WebP 读 VP8X/VP8/VP8L 头。
  *
  * 用法：
- *   node tools/install-atlas.mjs <图集文件> [--name whale] [--display "大肥鲸"] [--dry-run]
+ *   node tools/install-atlas.mjs <图集文件> [--name whale] [--display "大肥鱼"] [--dry-run]
  */
 
 import { copyFile, readFile, writeFile } from 'node:fs/promises';
@@ -67,7 +67,7 @@ const input = process.argv.find((value, index) => index >= 2 && !value.startsWit
 const dryRun = process.argv.includes('--dry-run');
 
 if (input === undefined) {
-  console.error('用法：node tools/install-atlas.mjs <图集文件> [--name whale] [--display "大肥鲸"] [--dry-run]');
+  console.error('用法：node tools/install-atlas.mjs <图集文件> [--name whale] [--display "大肥鱼"] [--dry-run]');
   process.exitCode = 1;
   process.exit();
 }
@@ -113,7 +113,7 @@ if (!['.png', '.webp'].includes(extension)) {
 }
 
 const id = flag('name', 'whale');
-const displayName = flag('display', '大肥鲸');
+const displayName = flag('display', '大肥鱼');
 const destination = join(pluginRoot, 'assets', `spritesheet${extension}`);
 
 console.log(`\n安装计划：`);
@@ -132,7 +132,7 @@ await writeFile(
     {
       id,
       displayName,
-      description: '一只陪你在桌面上写代码的蓝色鲸鱼。',
+      description: '一只陪你在桌面上写代码的蓝色大肥鱼。',
       spriteVersionNumber: 2,
       spritesheetPath: basename(destination),
     },
