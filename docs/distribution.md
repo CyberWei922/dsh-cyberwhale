@@ -214,5 +214,39 @@ node -e "const p=require('/tmp/scratch-home/profiles/web/package.json');console.
 - **刚发布不足 24 小时的版本会被 pnpm 的供应链策略拦一下**。pnpm 11 默认有 `minimumReleaseAge`（避免装到刚被抢注/投毒的版本）：实测刚发布几分钟的 `dsh-cyberwhale@0.1.0` 会被 pnpm 打印提示，并自动把 `dsh-cyberwhale@0.1.0` 写进 profile 的 `pnpm-workspace.yaml` → `minimumReleaseAgeExclude`。
   - 默认（`minimumReleaseAgeStrict` 未开）只是提示，安装照常成功。
   - 若用户把 `minimumReleaseAgeStrict` 设为 `true`，安装会被拦下要求确认；这种情况让用户等发布满 24 小时，或手动把包名加进 `minimumReleaseAgeExclude`。
+
+### 升级时会被这个策略「静默降级」
+
+`minimumReleaseAge` 只放行**发布满 24 小时**的版本。所以在新版本发布后一天内做「卸载再装」时，pnpm 会在 `^0.1.0` 这个范围里挑**唯一被允许的那个** —— 也就是已经进白名单的旧版本，看起来就像升级没生效。
+
+实测（0.1.2 发布 8 小时后）：
+
+| 版本 | 发布时间 | 相对于重装时刻 | pnpm 是否允许 |
+|---|---|---|---|
+| 0.1.0 | 25 小时前 | 已满 24h | ✅（且已在 `minimumReleaseAgeExclude`） |
+| 0.1.1 | 17 小时前 | 不足 24h | ❌ |
+| 0.1.2 | 8 小时前 | 不足 24h | ❌ |
+
+结果：`add dsh-cyberwhale` 仍然装回 0.1.0，`pnpm-lock.yaml` 里还是 `0.1.0`。
+
+**升级到刚发布的版本要显式写版本号**，pnpm 会把它加进白名单：
+
+```bash
+dsh plugin --profile desktop add dsh-cyberwhale@0.1.2
+# → Added 1 entry to minimumReleaseAgeExclude: dsh-cyberwhale@0.1.2
+```
+
+### ⚠️ 不要在 Harness 运行中改 desktop profile
+
+上面这条命令**必须在 Harness 完全退出后**跑。桌面版 CLI 自己会拿 profile 文件锁，但运行中的应用还会用它**内存里**的状态做一次 reconcile —— 两边撞上就会把外部写入覆盖掉，实测会把包从 `dsh.profile.bundles` 里删掉、`node_modules` 清空，最终插件根本不加载。
+
+这个坑很隐蔽：命令输出全是成功，只有事后检查 `node_modules` 才会发现包没了。所以改完一定要确认这三件事：
+
+```bash
+P="$HOME/.dsh/profiles/desktop"
+node -p "require('$P/node_modules/dsh-cyberwhale/package.json').version"   # 包在不在
+grep -c plugins.bundle.activation "$P/node_modules/dsh-cyberwhale/lib/client.js"  # 产物对不对
+node -p "require('$P/package.json').dsh.profile.bundles.includes('dsh-cyberwhale')"  # bundles 里有没有它
+```
   - 这个副作用会写进用户的 profile，属于 pnpm 的正常行为，不是插件的问题。
 - macOS 上的 Electron 首次解包（122 MB 的 zip）需要几十秒，期间设置页的「运行状态」是「窗口启动中…」，属正常现象。
