@@ -8,7 +8,7 @@ import { PassThrough } from 'node:stream';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createPetState } from '../lib/state.js';
-import { saveSettings, loadSettings } from '../lib/settings.js';
+import { LIMITS, saveSettings, loadSettings } from '../lib/settings.js';
 import { BUBBLE_WIDTH, computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
 
 let now = 0;
@@ -32,8 +32,15 @@ console.log('✓ 长任务、等待确认及瞬态回落');
 const home = await mkdtemp(join(tmpdir(), 'deskpet-regression-'));
 try {
   const env = { DSH_HOME: home };
-  await Promise.all(Array.from({ length: 20 }, (_, i) => saveSettings({ scale: 0.5 + i * 0.05 }, env)));
-  assert.ok(Math.abs((await loadSettings(env)).scale - 1.45) < 1e-10);
+  // 数值范围**跟着 LIMITS 算**，不要写死 —— 之前写死 1.45，
+  // 上限从 1.6 压到 1.2 之后就被夹紧了，测试直接红。
+  const lastScale = LIMITS.scale.min + 19 * ((LIMITS.scale.max - LIMITS.scale.min) / 20);
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      saveSettings({ scale: LIMITS.scale.min + i * ((LIMITS.scale.max - LIMITS.scale.min) / 20) }, env),
+    ),
+  );
+  assert.ok(Math.abs((await loadSettings(env)).scale - lastScale) < 1e-10);
   const invalidHome = join(home, 'blocked');
   await writeFile(invalidHome, 'blocked');
   await assert.rejects(saveSettings({}, { DSH_HOME: invalidHome }));
