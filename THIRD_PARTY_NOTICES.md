@@ -3,6 +3,11 @@
 本项目的代码以 MIT 发布（见 `LICENSE`）。以下列出开发过程中参考过的外部成果，
 以及它们的许可与使用方式。
 
+> **关于美术资产**：`assets/spritesheet.*`、`assets/portrait.png`、`assets/icon.png`
+> 都是本项目自制的角色素材，随代码以**同一 MIT 许可**发布。本项目**不包含任何
+> 第三方的美术资产**。这一说明原先附在 `LICENSE` 末尾，后来移到本文件 ——
+> 在标准 MIT 正文后追加内容会让 GitHub 的许可证识别退化成 `NOASSERTION`。
+
 ---
 
 ## 1. 规格来源：OpenAI `hatch-pet` skill
