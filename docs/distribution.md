@@ -229,12 +229,34 @@ node -e "const p=require('/tmp/scratch-home/profiles/web/package.json');console.
 
 结果：`add dsh-cyberwhale` 仍然装回 0.1.0，`pnpm-lock.yaml` 里还是 `0.1.0`。
 
-**升级到刚发布的版本要显式写版本号**，pnpm 会把它加进白名单：
+**升级到刚发布的版本要「先卸载、再显式写版本号装」**：
 
 ```bash
+dsh plugin --profile desktop remove dsh-cyberwhale
 dsh plugin --profile desktop add dsh-cyberwhale@0.1.2
+# → + dsh-cyberwhale 0.1.2
 # → Added 1 entry to minimumReleaseAgeExclude: dsh-cyberwhale@0.1.2
 ```
+
+⚠️ **`remove` 这一步不能省。** 旧版本号留在 `pnpm-lock.yaml` 里时，`add <新版本>` 会先写进一条新的锁文件条目，紧接着**锁文件策略校验**判定它「发布不足 24 小时」而失败 —— pnpm 会回滚，把依赖整个删掉，profile 就停在一个更坏的状态：
+
+```
+dependencies: {"dsh-cyberwhale":"^0.1.2"}   ← 声明还在
+bundles:      没有 dsh-cyberwhale            ← 被回滚删了
+node_modules: 空的                            ← 被回滚删了
+```
+
+更坑的是**命令行输出看起来像成功**（能看到 `Packages: +1` 和 `Done in …`），真正的失败只写在 `.plugin-manager/logs/<operation>/pnpm.log` 里：
+
+```
+✗ Lockfile failed supply-chain policy check (1 entry in 841ms)
+[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] dsh-cyberwhale@0.1.2 was published at
+  2026-10-01T04:05:16.000Z, within the minimumReleaseAge cutoff
+```
+
+先 `remove` 清掉旧条目后，`add <新版本>` 走的是全新解析，可以正常安装（已在 desktop profile 的真实副本上验证）。
+
+另一个容易被误会的现象：**安装对话框显示的版本和装完后的版本不一致**。对话框里的版本来自 `pluginManager.inspect`（对注册表的 `pnpm view`，拿到的是 latest），而实际安装跑的是范围解析 —— 受策略和锁文件约束。所以会出现「对话框写 0.1.2、插件页显示 0.1.0」，那不是有残留，是策略把安装降级了。装完以插件页显示、或 `node_modules/<包名>/package.json` 的 `version` 为准。
 
 ### ⚠️ 不要在 Harness 运行中改 desktop profile
 
