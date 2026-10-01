@@ -128,10 +128,34 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
-**当前状态：v0.1.3 已双端发布** —— <https://www.npmjs.com/package/dsh-cyberwhale> 与
-<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.3>（带 provenance 证明）。
+**当前状态：v0.1.4 已双端发布** —— <https://www.npmjs.com/package/dsh-cyberwhale> 与
+<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.4>（带 provenance 证明）。
 
 **发布是全自动的：推一个 `v*` tag 就够了。** 详见下面的「发布」。
+
+### v0.1.4 改了什么
+
+**运行时下载源改成用户可选，去掉自动回退。**
+
+原来的策略是「官方源失败 → 自动改用国内镜像」，但国内直连 GitHub Release 的
+典型表现是**「连得上但极慢」而不是「失败」**（实测 12 秒零字节、HTTP 000，
+而镜像源 4.6 MB/s）。下载循环既没有超时也没有速度检测，所以回退永远触发不了，
+用户只看到一个不动的进度条。
+
+现在设置页多了一行「**运行时下载源**」：
+
+| 选项 | 地址 |
+|---|---|
+| **国内镜像**（默认）| `registry.npmmirror.com/-/binary/electron` |
+| **官方源** | `github.com/electron/electron/releases/download` |
+
+**默认给镜像是刻意的** —— 官方源在国内基本不可用，默认成官方源的话大多数用户
+第一次点「准备运行时」就会卡死。
+
+对应环境变量：`DSH_DESKPET_ELECTRON_SOURCE=mirror|official`。
+
+失败提示也重写了：说清**用的哪个源、该换哪个源、环境变量怎么写**。
+自定义镜像（`DSH_DESKPET_ELECTRON_MIRROR`）失败时另有提示 —— 它优先于设置页的选择。
 
 ### v0.1.3 改了什么
 
