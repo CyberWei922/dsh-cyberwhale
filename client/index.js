@@ -70,11 +70,23 @@ function prepareText(prepare) {
  * 官方设计系统没有 slider（全仓库 `type="range"` 零命中），
  * 因此用官方的 `SegmentedControl` 表达离散档位 —— 既符合规范也更好点。
  */
+/**
+ * 档位预设。锚点是 Codex 桌宠的显示尺寸（112.6 CSS px）—— 它对应我们
+ * 逻辑单元格 192 的 0.60 档，所以拿它当「中」，其余按接近等比铺开：
+ *
+ *   小 0.45（86 px，比 Codex 小 23%）
+ *   中 0.60（115 px，= Codex）
+ *   大 0.85（163 px）
+ *   特大 1.20（230 px）
+ *
+ * 上限压在 1.2 而不是原来的 1.6：1.6 下图集要放大 3.2 倍（明显发糊），
+ * 而且窗口会大占屏幕。1.2 时图集的放大只有 1.31 倍。
+ */
 const SCALE_PRESETS = [
-  { value: 'small', label: '小', scale: 0.7 },
-  { value: 'medium', label: '中', scale: 1.0 },
-  { value: 'large', label: '大', scale: 1.3 },
-  { value: 'huge', label: '特大', scale: 1.6 },
+  { value: 'small', label: '小', scale: 0.45 },
+  { value: 'medium', label: '中', scale: 0.6 },
+  { value: 'large', label: '大', scale: 0.85 },
+  { value: 'huge', label: '特大', scale: 1.2 },
 ];
 
 /** 把任意缩放值吸附到最近的档位。 */

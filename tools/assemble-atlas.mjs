@@ -49,6 +49,13 @@ import { pathToFileURL } from 'node:url';
 import { alphaBounds, createCanvas, decodePng, drawScaled, encodePng } from './lib/png.mjs';
 
 // ── 图集契约（必须与 helper/renderer/pet.js 的 ANIMATIONS 一致）─────────────
+/**
+ * **默认**单元格尺寸（Codex v2 契约）。
+ *
+ * 实际拼装尺寸由 `--cell 宽x高` 决定 —— 提高图集分辨率时靠它，
+ * 而不是改这两个常量：布局坐标系的含义（缩放档位、命中区）不跟着变。
+ * 之所以不做成可变的模块级变量：测试会反复调用 assemble()，可变全局会互相污染。
+ */
 export const CELL_WIDTH = 192;
 export const CELL_HEIGHT = 208;
 export const COLUMNS = 8;
@@ -153,6 +160,9 @@ export const DEFAULT_OPTIONS = {
   allowUpscale: false,
   strict: false,
   dryRun: false,
+  /** 图集单元格的像素尺寸。默认是 Codex 契约的 192×208。 */
+  cellWidth: CELL_WIDTH,
+  cellHeight: CELL_HEIGHT,
   /**
    * 帧间水平对齐：'off' | 'row'
    *
@@ -182,6 +192,11 @@ export function parseArguments(argv) {
       if (match === null) throw new Error('--safe 的格式应为 宽x高，例如 168x184');
       options.safeWidth = Number(match[1]);
       options.safeHeight = Number(match[2]);
+    } else if (arg === '--cell') {
+      const match = /^(\d+)x(\d+)$/.exec(next());
+      if (match === null) throw new Error('--cell 的格式应为 宽x高，例如 352x385');
+      options.cellWidth = Number(match[1]);
+      options.cellHeight = Number(match[2]);
     } else if (arg === '--margin') options.margin = Number(next());
     else if (arg === '--scale') options.scale = Number(next());
     else if (arg === '--anchor') {
@@ -207,7 +222,7 @@ export function parseArguments(argv) {
   }
 
   if (options.framesDir === null) throw new Error('缺少帧目录参数');
-  if (options.safeWidth > CELL_WIDTH || options.safeHeight > CELL_HEIGHT - options.margin) {
+  if (options.safeWidth > options.cellWidth || options.safeHeight > options.cellHeight - options.margin) {
     throw new Error(`安全区 ${options.safeWidth}x${options.safeHeight} 配合 margin ${options.margin} 会超出单元格`);
   }
   return options;
@@ -585,14 +600,19 @@ export async function assemble(options) {
   /** 被边界夹紧挪动过的帧（挪了说明"内容宽度 + 居中"放不下，只能牺牲居中）。 */
   const clampReport = [];
 
-  const atlas = createCanvas(CELL_WIDTH * COLUMNS, CELL_HEIGHT * ROWS);
+  // 本次拼装使用的单元格尺寸。下面所有几何计算都用这两个，不要再用导出的默认常量 ——
+  // 混用会让 --cell 只生效一半，出现「图集变大了但内容还按 192 排」这种诡异结果。
+  const cellWidth = options.cellWidth;
+  const cellHeight = options.cellHeight;
+
+  const atlas = createCanvas(cellWidth * COLUMNS, cellHeight * ROWS);
 
   /** 某帧在格内的水平位置（未夹紧）。 */
   function placementX(frame, column) {
-    const cellLeft = column * CELL_WIDTH;
+    const cellLeft = column * cellWidth;
     const sourceLeft = frame.mode === 'canvas' ? 0 : frame.bboxLeft;
     const rowFix = rowCenterFix.has(frame.row) ? 256 - rowCenterFix.get(frame.row) : 0;
-    return cellLeft + CELL_WIDTH / 2 - (frame.canvasWidth / 2 - sourceLeft) * scale
+    return cellLeft + cellWidth / 2 - (frame.canvasWidth / 2 - sourceLeft) * scale
       + ((frame.alignShift ?? 0) + rowFix) * scale;
   }
 
@@ -612,8 +632,8 @@ export async function assemble(options) {
       const x = placementX(frame, column);
       const contentLeft = frame.mode === 'canvas' ? x + frame.bboxLeft * scale : x;
       const span = (frame.mode === 'canvas' ? frame.contentWidth : frame.placement.width) * scale;
-      const leftLimit = column * CELL_WIDTH + EDGE_MARGIN;
-      const rightLimit = (column + 1) * CELL_WIDTH - EDGE_MARGIN;
+      const leftLimit = column * cellWidth + EDGE_MARGIN;
+      const rightLimit = (column + 1) * cellWidth - EDGE_MARGIN;
       needLeft = Math.max(needLeft, leftLimit - contentLeft);
       needRight = Math.max(needRight, contentLeft + span - rightLimit);
     });
@@ -630,16 +650,16 @@ export async function assemble(options) {
         // 再叠加帧间对齐补偿与整行回正，最后加上整行统一的夹紧偏移。
         const x = placementX(frame, column) + (rowClampShift.get(spec.row) ?? 0);
         // 垂直：摆放对象的底边距格子底部恰好 margin 像素
-        let y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - height;
+        let y = spec.row * cellHeight + cellHeight - options.margin - height;
         if (frame.mode === 'canvas') {
           // 画布模式：让该行的地面线落在格子地面线上，而不是让画布底边贴底。
           // 画布上下那两圈留白（角色活动范围之外的部分）会溢出到 margin 里 ——
           // 那部分本来就是透明的，不会越出格子。
-          y = spec.row * CELL_HEIGHT + CELL_HEIGHT - options.margin - groundLines.get(spec.row) * scale;
+          y = spec.row * cellHeight + cellHeight - options.margin - groundLines.get(spec.row) * scale;
           // 保险：万一内容真的会越出格子顶边，就整体下移（宁可重心略低也不能被裁）。
           const extent = canvasRowExtent.get(frame.row);
           const contentTopOnScreen = y + extent.top * scale;
-          const cellTop = spec.row * CELL_HEIGHT;
+          const cellTop = spec.row * cellHeight;
           if (contentTopOnScreen < cellTop) y += cellTop - contentTopOnScreen;
         }
         if (Math.abs(rowClampShift.get(spec.row) ?? 0) >= 1) {
@@ -663,14 +683,14 @@ export async function assemble(options) {
   for (const spec of ROW_SPECS) {
     const rowFrames = frames.filter((frame) => frame.row === spec.row);
     rowFrames.forEach((frame, column) => {
-      const cellLeft = column * CELL_WIDTH;
-      const cellTop = spec.row * CELL_HEIGHT;
-      let minX = CELL_WIDTH;
+      const cellLeft = column * cellWidth;
+      const cellTop = spec.row * cellHeight;
+      let minX = cellWidth;
       let maxX = -1;
-      let minY = CELL_HEIGHT;
+      let minY = cellHeight;
       let maxY = -1;
-      for (let y = 0; y < CELL_HEIGHT; y += 1) {
-        for (let x = 0; x < CELL_WIDTH; x += 1) {
+      for (let y = 0; y < cellHeight; y += 1) {
+        for (let x = 0; x < cellWidth; x += 1) {
           const px = cellLeft + x;
           const py = cellTop + y;
           if (atlas.data[(py * atlas.width + px) * 4 + 3] > 8) {
@@ -683,9 +703,9 @@ export async function assemble(options) {
       }
       if (maxX < 0) return; // 空格子：由帧数检查负责
 
-      const centerOffset = Math.abs((minX + maxX) / 2 - (CELL_WIDTH - 1) / 2);
+      const centerOffset = Math.abs((minX + maxX) / 2 - (cellWidth - 1) / 2);
       const epsilon = 6; // 抗锯齿与取整的余量
-      if (minX < 3 || maxX > CELL_WIDTH - 4) {
+      if (minX < 3 || maxX > cellWidth - 4) {
         geometryIssues.push(`${frame.file}：合成后内容真的贴到格子边缘（x∈[${minX},${maxX}]），会被邻格裁切`);
       }
       if (minY < epsilon) {

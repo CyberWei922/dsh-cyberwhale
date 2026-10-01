@@ -108,6 +108,14 @@ const state = {
   animationStartedAt: performance.now(),
   spritesheet: null,
   manifest: null,
+  /**
+   * 图集里每个格子的**像素**尺寸，来自 pet.json 的 `spriteCell`。
+   *
+   * 和 `CELL`（192×208）不是一回事：`CELL` 是**布局坐标系** ——
+   * 缩放档位、命中区、气泡锚点都以它为准；这个只决定从图集里裁多大一块。
+   * 提高分辨率就是把这里调大，布局含义完全不变。
+   */
+  atlasCell: { width: 192, height: 208 },
   /** 命中区（相对单元格的百分比内缩）。 */
   hitInset: { left: 0.06, top: 0.04, right: 0.06, bottom: 0.04 },
   interactive: false,
@@ -144,14 +152,24 @@ async function loadAssets() {
     const blob = new Blob([new Uint8Array(payload.bytes)], { type: payload.mime ?? 'image/webp' });
     const bitmap = await createImageBitmap(blob);
 
-    if (bitmap.width !== COLS * CELL.width || ![9, ROWS].includes(bitmap.height / CELL.height)) {
+    // 单元格尺寸来自清单；没写就退回 Codex 契约的 192×208。
+    const declared = payload.manifest?.spriteCell;
+    const atlasCell =
+      Number.isFinite(Number(declared?.width)) && Number.isFinite(Number(declared?.height))
+        ? { width: Number(declared.width), height: Number(declared.height) }
+        : { width: CELL.width, height: CELL.height };
+
+    if (bitmap.width !== COLS * atlasCell.width || ![9, ROWS].includes(bitmap.height / atlasCell.height)) {
       bitmap.close();
-      throw new Error('图集尺寸必须为 1536×2288（或兼容的 1536×1872）');
+      throw new Error(
+        `图集尺寸 ${bitmap.width}×${bitmap.height} 与声明的单元格 ${atlasCell.width}×${atlasCell.height} 对不上`,
+      );
     }
     state.spritesheet?.close?.();
     state.spritesheet = bitmap;
+    state.atlasCell = atlasCell;
     state.manifest = payload.manifest ?? null;
-    state.hitInset = computeAlphaInset(bitmap);
+    state.hitInset = computeAlphaInset(bitmap, atlasCell);
     // Windows：主进程需要这份内缩比例来做命中判定（macOS 不需要，但上报无害）。
     host?.reportHitInset?.(state.hitInset);
     fallback.dataset.visible = '0';
@@ -167,28 +185,29 @@ async function loadAssets() {
  * 从 idle 首帧算一次「不透明像素」的包围盒，用它当命中区。
  * 这样透明边缘不会误吃点击。
  */
-function computeAlphaInset(bitmap) {
+function computeAlphaInset(bitmap, cell = { width: CELL.width, height: CELL.height }) {
+  // 采样尺寸用图集单元格，但返回的是**比例**，所以命中区与图集分辨率无关。
   const target = document.createElement('canvas');
-  target.width = CELL.width;
-  target.height = CELL.height;
+  target.width = cell.width;
+  target.height = cell.height;
   const tctx = target.getContext('2d', { willReadFrequently: true });
-  tctx.drawImage(bitmap, 0, 0, CELL.width, CELL.height, 0, 0, CELL.width, CELL.height);
+  tctx.drawImage(bitmap, 0, 0, cell.width, cell.height, 0, 0, cell.width, cell.height);
 
   let data;
   try {
-    data = tctx.getImageData(0, 0, CELL.width, CELL.height).data;
+    data = tctx.getImageData(0, 0, cell.width, cell.height).data;
   } catch {
     return state.hitInset;
   }
 
-  let minX = CELL.width;
-  let minY = CELL.height;
+  let minX = cell.width;
+  let minY = cell.height;
   let maxX = -1;
   let maxY = -1;
   const threshold = 16;
-  for (let y = 0; y < CELL.height; y += 1) {
-    for (let x = 0; x < CELL.width; x += 1) {
-      if (data[(y * CELL.width + x) * 4 + 3] > threshold) {
+  for (let y = 0; y < cell.height; y += 1) {
+    for (let x = 0; x < cell.width; x += 1) {
+      if (data[(y * cell.width + x) * 4 + 3] > threshold) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -199,10 +218,10 @@ function computeAlphaInset(bitmap) {
   if (maxX < 0) return state.hitInset;
 
   return {
-    left: minX / CELL.width,
-    top: minY / CELL.height,
-    right: 1 - (maxX + 1) / CELL.width,
-    bottom: 1 - (maxY + 1) / CELL.height,
+    left: minX / cell.width,
+    top: minY / cell.height,
+    right: 1 - (maxX + 1) / cell.width,
+    bottom: 1 - (maxY + 1) / cell.height,
   };
 }
 
@@ -457,7 +476,7 @@ function currentLookFrame(now) {
   }
 
   if (!state.lookAtCursor || state.dragging) return null;
-  if (state.spritesheet !== null && state.spritesheet.height < ROWS * CELL.height) return null;
+  if (state.spritesheet !== null && state.spritesheet.height < ROWS * state.atlasCell.height) return null;
   if (state.animation !== 'idle') return null; // 规则 1：只有待机才注视
   if (!over) return null;                      // 规则 2：鼠标必须在身上
   if (now - state.cursorEnteredAt > LOOK_HOLD_MS) return null; // 规则 3：最多 10 秒
@@ -507,12 +526,15 @@ function draw(now) {
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  // 源矩形按**图集**的单元格裁；目标矩形按**逻辑** CELL 画 ——
+  // 画布的 setTransform 已经把逻辑坐标映射到实际像素了（见 syncCanvas）。
+  const atlas = state.atlasCell;
   ctx.drawImage(
     state.spritesheet,
-    col * CELL.width,
-    row * CELL.height,
-    CELL.width,
-    CELL.height,
+    col * atlas.width,
+    row * atlas.height,
+    atlas.width,
+    atlas.height,
     0,
     0,
     CELL.width,

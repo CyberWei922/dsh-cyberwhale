@@ -289,21 +289,21 @@ console.log('\n[5] RPC 通道');
 const stateReply = await rpc('getState');
 check('getState 返回 ok', stateReply.ok, true);
 check('getState 带 settings', typeof stateReply.value.settings.scale, 'number');
-check('getState 带 limits（上限与窗口包络一致）', stateReply.value.limits.scale.max, 1.6);
+check('getState 带 limits（上限与窗口包络一致）', stateReply.value.limits.scale.max, 1.2);
 check('getState 带 runtime', typeof stateReply.value.runtime.running, 'boolean');
 
 const before = currentHandle;
 const spawnsBeforeScale = spawnedHandles.length;
 sent.length = 0;
-const updateReply = await rpc('updateSettings', { scale: 1.5 });
-check('updateSettings 返回新值', updateReply.value.settings.scale, 1.5);
+const updateReply = await rpc('updateSettings', { scale: 1.15 });
+check('updateSettings 返回新值', updateReply.value.settings.scale, 1.15);
 check('缩放变化【不】重启进程（改为就地改窗口尺寸）', spawnedHandles.length, spawnsBeforeScale);
-check('缩放通过 config 热下发给窗口', sent.filter((m) => m.t === 'config').at(-1)?.scale, 1.5);
+check('缩放通过 config 热下发给窗口', sent.filter((m) => m.t === 'config').at(-1)?.scale, 1.15);
 
 const disabled = await rpc('updateSettings', { enabled: false });
 check('可以关闭桌宠', disabled.value.settings.enabled, false);
 const persisted = await loadSettings();
-check('设置已落盘', persisted.scale, 1.5);
+check('设置已落盘', persisted.scale, 1.15);
 
 const greeting = await rpc('command', { action: 'greeting' });
 check('greeting 命令成功', greeting.ok, true);

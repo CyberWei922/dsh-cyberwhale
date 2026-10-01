@@ -13,6 +13,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   CELL_HEIGHT,
@@ -609,8 +610,69 @@ try {
     check('对齐没有把内容挤出格子', aligned.report.geometryIssues.length, 0);
   }
 
+  // ── 图集分辨率与清单契约 ──────────────────────────────────────────────
+  console.log('\n[14] 成品图集的单元格尺寸必须与 pet.json 声明一致');
+  {
+    // 这一条是为了防「只重拼了图集、忘了改清单」或反过来 ——
+    // 一旦对不上，渲染层裁格子的位置就全错，表现为宠物错位/花屏，很难查。
+    // 注意用仓库根目录，不是测试用的临时 workspace
+    const assetsDir = fileURLToPath(new URL('../assets', import.meta.url));
+    const manifest = JSON.parse(await readFile(join(assetsDir, 'pet.json'), 'utf8'));
+    const cell = manifest.spriteCell;
+    check('pet.json 声明了 spriteCell', typeof cell?.width === 'number' && typeof cell?.height === 'number', true);
+
+    const atlas = decodePng(await readFile(join(assetsDir, manifest.spritesheetPath)));
+    check('图集宽度 = 单元格宽 × 8', atlas.width, cell.width * 8);
+    check('图集高度 = 单元格高 × 11', atlas.height, cell.height * 11);
+
+    // 逐格检查有没有内容，用声明的单元格尺寸切
+    const expectedRows = new Map(ROW_SPECS.map((spec) => [spec.row, spec.expected]));
+    let filled = 0;
+    const empty = [];
+    for (const [row, count] of expectedRows) {
+      for (let column = 0; column < count; column += 1) {
+        let solid = 0;
+        for (let y = 0; y < cell.height; y += 2) {
+          for (let x = 0; x < cell.width; x += 2) {
+            const px = column * cell.width + x;
+            const py = row * cell.height + y;
+            if (atlas.data[(py * atlas.width + px) * 4 + 3] > 128) solid += 1;
+          }
+        }
+        if (solid > 0) filled += 1;
+        else empty.push(`第${row}行第${column}格`);
+      }
+    }
+    check(`按声明的单元格切，每一格都有内容（${filled} 格）`, empty.join('、'), '');
+    check('格子总数等于规格总帧数', filled, ROW_SPECS.reduce((sum, spec) => sum + spec.expected, 0));
+
+    // 内容不能贴到格子边界（贴了就说明拼装时安全区算错了，会被邻格裁切）
+    let worst = null;
+    for (const [row, count] of expectedRows) {
+      for (let column = 0; column < count; column += 1) {
+        let minX = cell.width, maxX = -1, minY = cell.height, maxY = -1;
+        for (let y = 0; y < cell.height; y += 1) {
+          for (let x = 0; x < cell.width; x += 1) {
+            const px = column * cell.width + x;
+            const py = row * cell.height + y;
+            if (atlas.data[(py * atlas.width + px) * 4 + 3] > 8) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX < 0) continue;
+        const margin = Math.min(minX, maxX === -1 ? 0 : cell.width - 1 - maxX, minY, cell.height - 1 - maxY);
+        if (worst === null || margin < worst.margin) worst = { margin, cell: `第${row}行第${column}格` };
+      }
+    }
+    check(`内容离格子边缘最近也有余量（最小 ${worst?.margin}px @ ${worst?.cell}）`, worst !== null && worst.margin >= 2, true);
+  }
+
   // ── 直接执行 vs 被导入 ────────────────────────────────────────────────
-  console.log('\n[14] 被导入时不应执行 CLI');
+  console.log('\n[15] 被导入时不应执行 CLI');
   {
     // 能 import 到函数本身就说明没有在导入时跑 main()（跑了会 process.exit / 打印一堆东西）
     check('导出了 assemble', typeof assemble, 'function');

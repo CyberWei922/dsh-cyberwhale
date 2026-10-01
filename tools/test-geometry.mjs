@@ -125,7 +125,7 @@ console.log('\n[2] 尺寸公式');
 
 console.log('\n[3c] 气泡左右让位不能被原生窗口截断');
 {
-  for (const scale of [0.45, 0.5, 0.7, 1.0, 1.6]) {
+  for (const scale of [0.45, 0.5, 0.7, 1.0, 1.2]) {
     const pet = petRectInWindow(windowMetrics, scale);
     // 左贴边时气泡向身体右侧移动，右贴边时反向移动。
     const leftBubbleRight = pet.left + BUBBLE_WIDTH + 6;
@@ -141,7 +141,7 @@ console.log('\n[3c] 气泡左右让位不能被原生窗口截断');
 console.log('\n[3] 宠物在窗口里的矩形（水平居中、垂直偏移恒定）');
 {
   const tops = [];
-  for (const scale of [0.7, 1.0, 1.6]) {
+  for (const scale of [0.45, 0.6, 1.2]) {
     const pet = petRectInWindow(windowMetrics, scale);
     tops.push(pet.top);
     // 窗口宽与宠物宽的差值可能是奇数，整像素定位下无法精确居中，
@@ -159,7 +159,7 @@ console.log('\n[3b] 每个档位下气泡都要放得下（上下都能放）');
   // 气泡实际高度约 30px（一行 12.5px 文字 + 内边距）。这里用 40px 留足余量。
   const BUBBLE_HEIGHT = 40;
   const GAP = 8;
-  for (const scale of [0.7, 1.0, 1.6]) {
+  for (const scale of [0.45, 0.6, 1.2]) {
     const pet = petRectInWindow(windowMetrics, scale);
     const roomAbove = pet.top;
     const roomBelow = windowMetrics.height - pet.top - pet.height;
@@ -182,7 +182,7 @@ console.log('\n[3b] 每个档位下气泡都要放得下（上下都能放）');
 // ── 位置限制（这是踩过坑的地方）──────────────────────────────────────────
 console.log('\n[4] 位置限制：按宠物矩形，而不是窗口矩形');
 {
-  for (const scale of [0.7, 1.0, 1.6]) {
+  for (const scale of [0.45, 0.6, 1.2]) {
     const pet = petRectInWindow(windowMetrics, scale);
 
     const up = clampToArea(800, -99999, windowMetrics, scale, AREA);
