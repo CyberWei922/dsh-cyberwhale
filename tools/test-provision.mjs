@@ -10,7 +10,7 @@
  *   2. 进度节流
  *   3. 错误分类（MissingRuntimeError / 用户取消）
  *   4. `provisionElectron` 的「本机已就绪」与「缓存命中」两条路径
- *   5. 下载链路：官方源失败自动改用镜像（fetch 与解包都是注入的假对象）
+ *   5. 下载链路：按选定的源下载、不自动换源（fetch 与解包都是注入的假对象）
  *
  * 所有会碰网络的地方都注入假 `fetch`；解包注入假 `extract`；因此**不会**真的
  * 下载、也不会真的解包。临时目录用 `mkdtemp`，跑完就删。
@@ -33,6 +33,7 @@ import {
   createProgressThrottle,
   provisionElectron,
   releaseBaseFor,
+  sourcesFor,
 } from '../lib/electron-provision.js';
 import { MissingRuntimeError, artifactSuffix, probeElectron } from '../lib/electron-runtime.js';
 
@@ -117,6 +118,57 @@ console.log('\n[1] 发行源基址（官方用 download/v<ver>，镜像用 v<ver
   );
   check('空白 mirror 回落官方源', releaseBaseFor({ version: '1.2.3', mirror: '   ' }), 'https://github.com/electron/electron/releases/download/v1.2.3');
   check('没给 mirror 也用官方源', releaseBaseFor({ version: '9.9.9' }), 'https://github.com/electron/electron/releases/download/v9.9.9');
+
+  // sourcesFor：把「下载源优先级」这条策略单独锁住。
+  //
+  // 这里最要紧的是「长度恒为 1」—— 曾经的实现会在官方源失败后自动改用镜像，
+  // 但国内直连 GitHub 是「连得上但极慢」而不是「失败」，回退永远触发不了，
+  // 用户只会看到一个不动的进度条。现在改成用户选一次、只走一个源。
+  check(
+    '一个源都不给时用国内镜像（不是官方源）',
+    sourcesFor({ version: '43.4.1' }).map((entry) => entry.source),
+    ['mirror'],
+  );
+  check(
+    '选官方源就只给官方源',
+    sourcesFor({ version: '43.4.1', source: 'official' }).map((entry) => entry.source),
+    ['official'],
+  );
+  check(
+    '选镜像就只给镜像',
+    sourcesFor({ version: '43.4.1', source: 'mirror' }).map((entry) => entry.source),
+    ['mirror'],
+  );
+  check(
+    '任何情况下都只有一个源（不会自动回退）',
+    [
+      sourcesFor({ version: '1.0.0' }).length,
+      sourcesFor({ version: '1.0.0', source: 'official' }).length,
+      sourcesFor({ version: '1.0.0', source: 'mirror' }).length,
+      sourcesFor({ version: '1.0.0', mirror: 'https://x.example.com/e' }).length,
+    ],
+    [1, 1, 1, 1],
+  );
+  check(
+    '自定义 mirror 优先于 source',
+    sourcesFor({ version: '43.4.1', source: 'official', mirror: 'https://x.example.com/e' })[0].base,
+    'https://x.example.com/e/v43.4.1',
+  );
+  check(
+    '自定义 mirror 的 source 标成 custom（便于错误文案区分）',
+    sourcesFor({ version: '43.4.1', mirror: 'https://x.example.com/e' })[0].source,
+    'custom',
+  );
+  check(
+    '镜像源地址形状正确',
+    sourcesFor({ version: '43.4.1', source: 'mirror' })[0].base,
+    `${ELECTRON_MIRROR_BASE}/v43.4.1`,
+  );
+  check(
+    '官方源地址形状正确',
+    sourcesFor({ version: '43.4.1', source: 'official' })[0].base,
+    'https://github.com/electron/electron/releases/download/v43.4.1',
+  );
 }
 
 // ── [2] 产物文件名 ────────────────────────────────────────────────────────
@@ -245,7 +297,7 @@ console.log('\n[5] provisionElectron：本机已就绪');
     );
     check('版本不匹配时不短路', outcome.ok, false);
     check('失败按 ProvisionError 归类', outcome.error?.name, 'ProvisionError');
-    check('attempts 记录了问过的两个源', outcome.error?.attempts?.map((a) => a.source), ['official', 'mirror']);
+    check('attempts 只记录用过的那个源（不自动换源）', outcome.error?.attempts?.map((a) => a.source), ['mirror']);
   });
 }
 
@@ -297,8 +349,8 @@ console.log('\n[6] provisionElectron：命中 @electron/get 缓存');
   });
 }
 
-// ── [7] 下载链路：换源与进度 ─────────────────────────────────────────────
-console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与解包都是假的）');
+// ── [7] 下载链路：只用选定的源（不自动换源）与进度 ───────────────────────
+console.log('\n[7] 下载链路：只用用户选定的源（fetch 与解包都是假的）');
 {
   const platform = osPlatform();
   const arch = osArch();
@@ -309,44 +361,43 @@ console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与�
   const officialBase = releaseBaseFor({ version });
   const mirrorBase = releaseBaseFor({ version, mirror: ELECTRON_MIRROR_BASE });
 
-  await withHome('mirror-fallback', async (home) => {
-    // 官方源 404、镜像源正常 —— 这是国内用户点「准备运行时」最常见的一次。
-    const downloads = [];
+  /** 造一个只认得 base 的假 fetch，并把它问过的 URL 记下来。 */
+  const fakeFetch = (base, asked) => async (url) => {
+    asked.push(String(url));
+    if (String(url) === `${base}/${fileName}`) {
+      return new Response(payload, { status: 200, headers: { 'content-length': String(payload.length) } });
+    }
+    if (String(url) === `${base}/SHASUMS256.txt`) {
+      return new Response(`${digest} *${fileName}\n`, { status: 200 });
+    }
+    return new Response('nope', { status: 404, statusText: 'Not Found' });
+  };
+
+  const offline = {
+    probe: async () => ({ ok: false, code: 'missing-runtime', error: '没有运行时' }),
+    findZip: async () => null,
+  };
+
+  // 默认（不传 source）走国内镜像 —— 官方源在国内是「慢」而不是「失败」，
+  // 所以默认值必须是对国内可用的那个。
+  await withHome('default-mirror', async (home) => {
+    const asked = [];
     const progress = [];
-    const extracted = [];
     const result = await provisionElectron({
       env: { DSH_HOME: home },
       version,
       platform,
       arch,
-      probe: async () => ({ ok: false, code: 'missing-runtime', error: '没有运行时' }),
-      findZip: async () => null,
-      extract: async (source, destination) => {
-        extracted.push(source);
-        return join(destination, 'Electron');
-      },
-      fetch: async (url) => {
-        downloads.push(String(url));
-        if (String(url) === `${officialBase}/${fileName}` || String(url) === `${officialBase}/SHASUMS256.txt`) {
-          return new Response('not found', { status: 404, statusText: 'Not Found' });
-        }
-        if (String(url) === `${mirrorBase}/${fileName}`) {
-          return new Response(payload, { status: 200, headers: { 'content-length': String(payload.length) } });
-        }
-        if (String(url) === `${mirrorBase}/SHASUMS256.txt`) {
-          return new Response(`${digest} *${fileName}\n`, { status: 200 });
-        }
-        return new Response('unexpected', { status: 500, statusText: 'Server Error' });
-      },
+      ...offline,
+      extract: async (source, destination) => join(destination, 'Electron'),
+      fetch: fakeFetch(mirrorBase, asked),
       onProgress: (entry) => progress.push(entry),
     });
 
-    check('官方源失败后仍然成功（一键的关键）', result.ok, true);
-    check('phase 是 ready', result.phase, 'ready');
-    check('返回值说明实际成功的是镜像', result.source, 'mirror');
+    check('不传 source 时默认用国内镜像', result.source, 'mirror');
     check('url 指向镜像地址', result.url, `${mirrorBase}/${fileName}`);
-    check('确实先问了官方源、再问了镜像', downloads.includes(`${officialBase}/${fileName}`) && downloads.includes(`${mirrorBase}/${fileName}`), true);
-    check('解包用的是下载下来的临时 zip', typeof extracted[0] === 'string' && extracted[0].endsWith(fileName), true);
+    check('解包用的是下载下来的临时 zip', progress.some((e) => e.phase === 'extracting'), true);
+    check('全程不问 GitHub', asked.some((url) => url.includes('github.com')), false);
     check(
       '进度阶段齐全',
       [...new Set(progress.map((entry) => entry.phase))],
@@ -357,7 +408,41 @@ console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与�
     check('进度里带版本', progress.every((entry) => entry.version === version), true);
   });
 
-  // 显式指定 mirror 时只走它 —— 用户明确要求的源不该被"偷偷"换回官方。
+  // 显式选官方源 —— 只走官方，不"偷偷"换成镜像（用户明确选了就该照做）。
+  await withHome('source-official', async (home) => {
+    const asked = [];
+    const result = await provisionElectron({
+      env: { DSH_HOME: home },
+      version,
+      platform,
+      arch,
+      ...offline,
+      source: 'official',
+      extract: async (source, destination) => join(destination, 'Electron'),
+      fetch: fakeFetch(officialBase, asked),
+    });
+
+    check('选官方源就用官方源', result.source, 'official');
+    check('url 指向 GitHub Release', result.url, `${officialBase}/${fileName}`);
+    check('选官方源时不会去问镜像', asked.some((url) => url.includes('npmmirror')), false);
+  });
+
+  // 环境变量 DSH_DESKPET_ELECTRON_SOURCE 是设置项的 CLI 等价物。
+  await withHome('source-env', async (home) => {
+    const asked = [];
+    const result = await provisionElectron({
+      env: { DSH_HOME: home, DSH_DESKPET_ELECTRON_SOURCE: 'official' },
+      version,
+      platform,
+      arch,
+      ...offline,
+      extract: async (source, destination) => join(destination, 'Electron'),
+      fetch: fakeFetch(officialBase, asked),
+    });
+    check('环境变量可以指定下载源', result.source, 'official');
+  });
+
+  // 自定义镜像基址优先于 source —— 它是"我知道该去哪下"的最后手段。
   await withHome('explicit-mirror', async (home) => {
     const explicit = 'https://mirror.example.com/electron';
     const asked = [];
@@ -366,26 +451,19 @@ console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与�
       version,
       platform,
       arch,
+      ...offline,
       mirror: explicit,
-      probe: async () => ({ ok: false, code: 'missing-runtime', error: '没有运行时' }),
-      findZip: async () => null,
       extract: async (source, destination) => join(destination, 'Electron'),
-      fetch: async (url) => {
-        asked.push(String(url));
-        if (String(url) === `${explicit}/v${version}/${fileName}`) {
-          return new Response(payload, { status: 200, headers: { 'content-length': String(payload.length) } });
-        }
-        if (String(url) === `${explicit}/v${version}/SHASUMS256.txt`) {
-          return new Response(`${digest} *${fileName}\n`, { status: 200 });
-        }
-        return new Response('nope', { status: 404, statusText: 'Not Found' });
-      },
+      fetch: fakeFetch(`${explicit}/v${version}`, asked),
     });
+
     check('显式 mirror 用 v<ver>/ 形状', result.url, `${explicit}/v${version}/${fileName}`);
     check('显式 mirror 时不会去问 GitHub', asked.some((url) => url.includes('github.com')), false);
+    check('显式 mirror 时不会去问 npmmirror', asked.some((url) => url.includes('npmmirror')), false);
   });
 
-  // 两个源都失败：错误信息要说清「问过哪些源、为什么失败」，并保留换源指引。
+  // 失败：只说「用的哪个源、为什么」，并明确告诉用户去换哪个源。
+  // 现在不自动换源了，所以这句话必须出现在错误里，否则用户不知道下一步做什么。
   await withHome('all-fail', async (home) => {
     const outcome = await caught(() =>
       provisionElectron({
@@ -393,17 +471,38 @@ console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与�
         version,
         platform,
         arch,
-        probe: async () => ({ ok: false, code: 'missing-runtime', error: '没有运行时' }),
-        findZip: async () => null,
+        ...offline,
         extract: async () => '/fake/Electron',
-        fetch: async (url) => new Response('down', { status: 500, statusText: 'Server Error' }),
+        fetch: async () => new Response('down', { status: 500, statusText: 'Server Error' }),
       }),
     );
+
     check('全部失败时抛错', outcome.ok, false);
-    check('错误里有结构化的 attempts', outcome.error?.attempts?.length, 2);
-    checkIncludes('文案列出官方源', outcome.error?.message, '官方源');
-    checkIncludes('文案列出国内镜像', outcome.error?.message, '国内镜像');
-    checkIncludes('文案保留改用镜像的指引', outcome.error?.message, 'DSH_DESKPET_ELECTRON_MIRROR');
+    check('错误里有结构化的 attempts', outcome.error?.attempts?.length, 1);
+    checkIncludes('文案说清用的哪个源', outcome.error?.message, '用的源：国内镜像');
+    checkIncludes('文案指向设置页', outcome.error?.message, '设置 → 桌宠 → 运行时下载源');
+    checkIncludes('文案给出另一个源的名字', outcome.error?.message, '官方源');
+    checkIncludes('文案给出环境变量写法', outcome.error?.message, 'DSH_DESKPET_ELECTRON_SOURCE=official');
+    checkIncludes('文案保留自定义镜像的兜底', outcome.error?.message, 'DSH_DESKPET_ELECTRON_MIRROR');
+
+  // 自定义镜像会覆盖设置页的选择 —— 这时让它去改设置是误导，得先清掉自定义基址。
+  await withHome('custom-fail', async (home) => {
+    const outcome = await caught(() =>
+      provisionElectron({
+        env: { DSH_HOME: home },
+        version,
+        platform,
+        arch,
+        mirror: 'https://invalid.example.invalid/e',
+        ...offline,
+        extract: async () => '/fake/Electron',
+        fetch: async () => new Response('down', { status: 500, statusText: 'Server Error' }),
+      }),
+    );
+    checkIncludes('自定义镜像失败时说明它优先于设置', outcome.error?.message, '自定义镜像优先于设置页的选择');
+    checkIncludes('并指出要清掉自定义基址', outcome.error?.message, 'DSH_DESKPET_ELECTRON_MIRROR');
+    check('自定义镜像失败时不叫用户去改设置页', outcome.error?.message.includes('改成「'), false);
+  });
   });
 
   // 进度节流：注入不同间隔，观察上报次数。
@@ -423,6 +522,8 @@ console.log('\n[7] 下载链路：官方源失败自动改用镜像（fetch 与�
         platform,
         arch,
         progressIntervalMs,
+        // 这个用例的假 fetch 只认官方源地址，所以要显式选官方源。
+        source: 'official',
         probe: async () => ({ ok: false, code: 'missing-runtime', error: '没有运行时' }),
         findZip: async () => null,
         extract: async (source, destination) => join(destination, 'Electron'),
@@ -519,7 +620,7 @@ console.log('\n[9] 临时 staging 目录不会残留');
   const stagingAfter = (await readdir(tmpdir())).filter(
     (name) => name.startsWith('dsh-pet-electron-') && !stagingBefore.has(name),
   );
-  check('成功、换源、失败、取消各条路径都清掉了临时目录', stagingAfter, []);
+  check('成功、失败、取消各条路径都清掉了临时目录', stagingAfter, []);
 }
 
 console.log(`\n结果：${passed} 通过 / ${failures.length} 失败`);

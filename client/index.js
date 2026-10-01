@@ -328,6 +328,7 @@ function WhalePetSection(props) {
   const scale = settings?.scale ?? 1;
   const lookAtCursor = settings?.lookAtCursor ?? true;
   const bubbles = settings?.bubbles ?? true;
+  const runtimeSource = settings?.runtimeSource ?? 'mirror';
 
   const prepare = runtime?.prepare ?? null;
   const prepareFailed = prepare?.status === 'failed';
@@ -465,9 +466,28 @@ function WhalePetSection(props) {
       ? row(
           'runtime',
           '运行环境',
-          '桌宠窗口需要 Electron 运行时（100–150 MB，随平台而定）。官方源不通时会自动改用国内镜像。',
+          '桌宠窗口需要 Electron 运行时（100–150 MB，随平台而定）。下载源在下面选。',
           runtimeControl,
           prepareFailed ? prepare?.error ?? null : null,
+        )
+      : null,
+
+    showRuntimeRow
+      ? row(
+          'runtime-source',
+          '运行时下载源',
+          '国内网络选「国内镜像」（npmmirror，实测 4.6 MB/s）；有加速器或国外网络选「官方源」。',
+          h(SegmentedControl, {
+            id: 'dsh-whale-runtime-source',
+            label: '运行时下载源',
+            value: runtimeSource,
+            disabled: pending === 'runtimeSource',
+            options: [
+              { value: 'mirror', label: '国内镜像' },
+              { value: 'official', label: '官方源' },
+            ],
+            onChange: (next) => void mutate('runtimeSource', 'updateSettings', { runtimeSource: next }),
+          }),
         )
       : null,
 

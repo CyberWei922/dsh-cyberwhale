@@ -34,7 +34,11 @@ npm test                 # 宿主、客户端、素材契约、状态、几何�
 
 插件通过 Harness 的公开服务订阅任务事件，再通过 `ctx.subprocess` 启动独立 Electron 助手窗口。设置页通过插件自注册的 `/deskpet` 路由读写偏好；路由先调用官方连接服务完成请求鉴权。
 
-Electron 运行时不在安装包里。`lib/electron-provision.js` 负责把它准备好：先复用本机已有运行时或 `@electron/get` 缓存，否则从官方源下载 `electron-v<版本>-<平台>.zip`、用同源 `SHASUMS256.txt` 校验 SHA-256，再经 staging 解包后替换目标目录。官方源失败时自动改用国内镜像重试。宿主半区把它包成 `prepareRuntime` / `cancelRuntime` 两个 RPC 端点，设置页据此显示进度与取消按钮；`tools/ensure-electron.mjs` 是同一模块的命令行外壳。
+Electron 运行时不在安装包里。`lib/electron-provision.js` 负责把它准备好：先复用本机已有运行时或 `@electron/get` 缓存，否则按用户选定的源下载 `electron-v<版本>-<平台>.zip`、用同源 `SHASUMS256.txt` 校验 SHA-256，再经 staging 解包后替换目标目录。
+
+下载源由设置页的「运行时下载源」决定（`mirror` / `official`，见 `sourcesFor()`），**只走一个源、不自动回退** —— 国内直连 GitHub 是「连得上但极慢」而不是「失败」，基于失败的回退触发不了。`DSH_DESKPET_ELECTRON_MIRROR` 可指定自定义镜像基址，优先级最高。
+
+宿主半区把它包成 `prepareRuntime` / `cancelRuntime` 两个 RPC 端点，设置页据此显示进度与取消按钮；`tools/ensure-electron.mjs` 是同一模块的命令行外壳。
 
 macOS 使用 stdin 下发消息，Windows 使用 subprocess 的 control pipe（fd 7），上行都使用 stdout JSON Lines。助手就绪或自动重启后重新同步配置、任务状态和气泡。卸载时结束受管进程，启动时清扫遗留助手。
 

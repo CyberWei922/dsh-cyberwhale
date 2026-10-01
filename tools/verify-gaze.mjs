@@ -21,18 +21,13 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveElectron } from '../lib/electron-runtime.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const ELECTRON = join(
-  process.env.HOME,
-  '.dsh',
-  'dsh-cyberwhale',
-  'electron',
-  'Electron.app',
-  'Contents',
-  'MacOS',
-  'Electron',
-);
+// 运行时路径由 electron-runtime.js 统一解析（探测顺序：环境变量 → DSH home →
+// @electron/get 缓存 → 官方下载）。**不要写死路径** —— 包名改过一次，
+// 写死 ~/.dsh/dsh-deskpet/... 的脚本就全失效了。
+const ELECTRON = (await resolveElectron({})).binary;
 const SCALE = 1.0;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

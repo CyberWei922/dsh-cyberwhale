@@ -24,9 +24,12 @@ import { dirname, join } from 'node:path';
 import { BUBBLE_WIDTH, computeMetrics, ENVELOPE_SCALE } from '../helper/geometry.js';
 import { decodePng } from './lib/png.mjs';
 
+import { resolveElectron } from '../lib/electron-runtime.js';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const metrics = computeMetrics(ENVELOPE_SCALE);
-const electron = `${process.env.HOME}/.dsh/dsh-cyberwhale/electron/Electron.app/Contents/MacOS/Electron`;
+// 同 verify-gaze：路径来自运行时解析，不写死。
+const electron = (await resolveElectron({})).binary;
 const dir = '/tmp/bubble-shots';
 rmSync(dir, { recursive: true, force: true });
 mkdirSync(dir, { recursive: true });

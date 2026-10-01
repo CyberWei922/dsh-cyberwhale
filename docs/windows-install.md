@@ -33,7 +33,7 @@
 ## 3. 准备 Electron 运行时
 
 **优先在设置页点**：重启 DSH Desktop → **设置 → 桌宠** → **准备运行时**。它会下载、校验 SHA-256、
-staging 解包后替换，官方源不通时自动改用国内镜像。
+staging 解包后替换。下载源在设置页的「运行时下载源」里选（国内镜像 / 官方源）。
 
 **多数情况下不用手动做**：插件启动时按 ① `DSH_DESKPET_ELECTRON` ② `<插件>/runtime/electron`
 ③ `%USERPROFILE%\.dsh\dsh-cyberwhale\electron` ④ **`@electron/get` 本地缓存**

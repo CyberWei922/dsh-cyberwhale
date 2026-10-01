@@ -513,7 +513,8 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
   check('缺运行时时出现「运行环境」行', missingText.includes('运行环境'), true);
   // 体积随平台而定（macOS 约 117 MB、Windows x64 约 150 MB），所以文案给区间而不是单个数字
   check('文案说明运行时体积（区间）', missingText.includes('100–150 MB'), true);
-  check('文案说明会自动改用国内镜像', missingText.includes('国内镜像'), true);
+  check('文案说明下载源可选', missingText.includes('运行时下载源'), true);
+  check('下载源有两个选项', missingText.includes('国内镜像') && missingText.includes('官方源'), true);
   const prepareButton = buttonsOf(missing.nodes).find((node) => labelOf(node) === '准备运行时');
   check('空闲时给的是「准备运行时」按钮', prepareButton !== undefined, true);
   prepareButton?.props?.onClick?.();
