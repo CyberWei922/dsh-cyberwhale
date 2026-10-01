@@ -79,25 +79,29 @@ npm pack                     # 产出 dsh-cyberwhale-<version>.tgz
 
 **没有 npm 账号时**：GitHub 两条路已经完整可用，什么都不会缺。npm 那条只是「用户少打几个字」的体验升级，可以以后再补。
 
-仓库里的 [`.github/workflows/release.yml`](../.github/workflows/release.yml) 已经把两条通道接好了 —— **推一个 tag 就自动双端发布**：
+仓库里的 [`.github/workflows/release.yml`](../.github/workflows/release.yml) 已经把两条通道接好了 ——
+**推一个 tag 就自动双端发布，`NPM_TOKEN` 也已配在仓库 secret 里，不需要任何手动步骤。**
 
 ```bash
 # 1) 改版本号（tag 必须和 package.json 的 version 一致，workflow 会校验）
-#    package.json -> version
-# 2) 提交后打 tag
-git tag v0.1.0
+# 2) 提交后打 tag 并推
+git tag -a v0.1.4 -m "v0.1.4：改了什么"
 git push origin main --tags
 ```
 
-workflow 会依次：校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 → 跑与平台无关的测试 → `npm pack` → 建 GitHub Release 并附上 `.tgz` → 发布到 npm。
+workflow 会依次：校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 →
+跑与平台无关的测试 → `npm pack` → 建 GitHub Release 并附上 `.tgz` → 发布到 npm。
 
-**npm 那一步在没有 `NPM_TOKEN` 时会自动跳过**（只留一条 notice），所以你现在就可以打 tag 发 Release，等注册完账号再补上 secret，下一次 tag 就双端齐发。
+**逐条命令和踩过的坑见下面的[「发布：推 tag 就完事」](#发布推-tag-就完事全自动)。**
+
+> 早期没有 npm 账号时，这一步会在缺少 `NPM_TOKEN` 的情况下**自动跳过**（只留一条 notice），
+> 所以打 tag 也能正常产出 GitHub Release。现在 secret 已配好，不会再跳过。
 
 npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（版本号重复、token 失效、2FA 没配好等），GitHub Release 和 `.tgz` 附件也已经产出了 —— 不会因为一条通道挂掉就什么都拿不到。
 
 > workflow 里的测试步骤是我在 macOS 上验证过的那几支（不含依赖本机进程扫描的 `test-host`）。Linux runner 上若有个别测试行为不同，把对应那一行删掉即可，不影响发布主线。
 
-## 注册 npm 账号与配置自动发布
+## npm 账号与自动发布的配置记录
 
 1. <https://www.npmjs.com/signup> 注册：用户名、邮箱、密码，然后点邮件里的验证链接。
 2. 开启 2FA：npm 近年在分批**强制发布者启用双重验证**（[官方说明](https://docs.npmjs.com/requiring-2fa-for-package-publishing-and-settings-modification/)）。用 Authenticator App（TOTP）最省事；建议同时存好恢复码。
@@ -124,9 +128,10 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
-**当前状态：v0.1.2 已双端发布；v0.1.3 代码已就绪、待发布** ——
-<https://www.npmjs.com/package/dsh-cyberwhale> 与
-<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.2>（带 provenance 证明）。
+**当前状态：v0.1.3 已双端发布** —— <https://www.npmjs.com/package/dsh-cyberwhale> 与
+<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.3>（带 provenance 证明）。
+
+**发布是全自动的：推一个 `v*` tag 就够了。** 详见下面的「发布」。
 
 ### v0.1.3 改了什么
 
@@ -180,31 +185,72 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 改名后本机原来的 `link:` 安装会失效（profile 里记的依赖 key 还是旧包名），需要在插件页重新安装一次。
 
-### 发布
+### 发布：推 tag 就完事（全自动）
 
-> ⚠️ **发布前先把 GitHub 仓库改名成 `dsh-cyberwhale`**（Settings → Repository name；GitHub 会让旧链接自动跳转）。
-> `package.json` 的 `repository.url` 已经指向新地址，而 release workflow 用的是
-> `npm publish --provenance` —— provenance 会拿实际仓库地址和 `repository.url` 对照，
-> 仓库还没改名就发，这一步会失败。仓库先改好，再打第一个 tag。
+仓库已配置 **`.github/workflows/release.yml`**，触发条件是**推 `v*` tag**。
+`NPM_TOKEN` 已经配在仓库 secret 里（Settings → Secrets and variables → Actions），
+所以一次 tag 推送会同时走完两条通道：
 
-**推荐**：按上面「双端发布」改版本号 → 打 tag → 推 tag，workflow 会同时产出 GitHub Release 和 npm 包。
+| 通道 | 产出 |
+|---|---|
+| **npm** | `npm publish --provenance`（带来源证明）|
+| **GitHub Release** | 自动建 Release + 附上 `npm pack` 的 `.tgz` |
 
-**手动发布**（本机排障时用）：
+**日常发版就四步**：
+
+```bash
+# 1. 改版本号（三处：package.json 和文档里的当前状态）
+npm version patch --no-git-tag-version     # 或手动改 package.json
+
+# 2. 本地跑一遍完整测试（workflow 也会跑，但本地更快发现）
+npm test
+
+# 3. 提交
+git add package.json docs/distribution.md && git commit -m "chore: 发布 0.1.4（改了什么）"
+
+# 4. 打 tag 并推 —— 这一步就是发布
+git tag -a v0.1.4 -m "v0.1.4：改了什么"
+git push origin main --tags
+```
+
+推完用 `gh run watch` 看进度，约 30 秒。
+
+### workflow 会替你挡掉这些坑
+
+推送之后、真正发布之前，workflow 按顺序检查 —— 任何一条不过就**不会发布**：
+
+| 检查 | 挡掉的问题 |
+|---|---|
+| **tag 与 `package.json` 版本一致** | 打错 tag、忘了改版本号 |
+| **重建 `lib/client.js` 后 git diff 必须干净** | 改了 `client/index.js` 却忘了 `node client/build.mjs` |
+| **跑 8 个与平台无关的测试** | 回归（`test-host` 不跑 —— 它依赖本机进程扫描，CI 上不稳定）|
+
+> **发布前一定本地跑一次 `npm test`** —— CI 少了 `test-host`，本地才是全套。
+
+### 手动发布（只在排障时用）
+
+`NPM_TOKEN` 失效、或 workflow 本身出问题时：
 
 ```bash
 npm login
-npm pack --dry-run           # 先看清单，确认 locale/icon/lib 都在
+npm pack --dry-run           # 先看清单，确认 assets/locale/lib 都在
 npm publish
 ```
 
-版本号在 `package.json` 里改；`npm version patch` 也能改，但它会顺手打一个 git tag 并提交 —— 用 workflow 时别重复打。
+`prepublishOnly` 会先跑 `node client/build.mjs`，保证发出去的是当前产物。
 
-`prepublishOnly` 会先跑 `node client/build.mjs`，保证发出去的 `lib/client.js` 是当前 `client/index.js` 的产物。
+> 报 `You cannot publish over the previously published versions: <版本号>` 说明
+> 「包名 + 版本号」已存在，改版本号再发。
 
-> 如果 `npm publish --dry-run` 报
-> `You cannot publish over the previously published versions: <版本号>`，
-> 说明这个「包名 + 版本号」已经存在，改版本号再发。改名之前 `dsh-cyberwhale@0.1.0`
-> 会一直报这条，因为那是别人已经发过的版本 —— 现在包名是 `dsh-cyberwhale`，不会再遇到。
+### 历史：这些坑已经踩过并解决了
+
+- **仓库必须先改名再打第一个 tag** —— `--provenance` 会拿实际仓库地址和
+  `package.json` 的 `repository.url` 对照，不一致就失败。现在仓库已经是
+  `dsh-cyberwhale`，这条不再有问题。
+- **`npm version patch` 会顺手打 tag** —— 用 workflow 时加 `--no-git-tag-version`，
+  否则你会打出两个 tag。
+- **registry 有延迟** —— 发布成功后 `npm view` 可能还要几十秒才看得到新版本
+  （日志里会写「may take a few minutes to become available」）。别以为发失败了。
 
 ## 发布前的验证
 
