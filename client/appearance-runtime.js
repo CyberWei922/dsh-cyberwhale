@@ -30,6 +30,8 @@ function createAppearanceController(ctx, call) {
     const config = current();
     const reduced = config?.reduceTransparency || window.matchMedia?.('(prefers-reduced-transparency: reduce)').matches;
     document.body.toggleAttribute('data-whale-glass-input', !!(config?.enabled && config.glassInput && !reduced));
+    // macOS 观感的设置面板同样跟随「美化」总开关，并在用户要求降低透明度时回落到官方原样。
+    document.body.toggleAttribute('data-whale-mac-settings', !!(config?.enabled && !reduced));
     const scheme = ctx.theme?.getTheme().active.colorScheme ?? 'light';
     const p = palette(config?.[scheme] ?? normalizeAppearance()[scheme]);
     const worst = mix(p.bg, contrast(p.fg, '#000000') > contrast(p.bg, '#000000') ? '#FFFFFF' : '#000000', 0.16);
@@ -151,7 +153,7 @@ function createAppearanceController(ctx, call) {
       disposed = true; clearInterval(timer); if (raf !== null) cancelAnimationFrame(raf);
       observer?.disconnect(); tokenDisposer?.(); removeLayers(); ++imageTask;
       if (imageURL) URL.revokeObjectURL(imageURL);
-      document.body?.removeAttribute('data-whale-glass-input'); document.body?.style.removeProperty('--whale-glass-text'); listeners.clear();
+      document.body?.removeAttribute('data-whale-glass-input'); document.body?.removeAttribute('data-whale-mac-settings'); document.body?.style.removeProperty('--whale-glass-text'); listeners.clear();
     },
   };
   if (hasTheme && document.body) {

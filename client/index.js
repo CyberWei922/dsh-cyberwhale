@@ -14,6 +14,11 @@
  * UI 一律使用官方基元（`@deepseek-ai/dsh-client-ui-primitives` 在客户端基线
  * 模块表里），因此开关、分段控件、按钮、状态点与官方设置页完全一致；
  * 行布局也照抄官方 `DeveloperToolsRow` 的尺寸与 token。
+ *
+ * 例外：设置面板本身在「美化」开启时会被 `client/settings-css.js` 改成 macOS 观感
+ * （左导航磨砂、右侧不透明、开关与标签贴近系统设置）。那里只用官方语义锚点
+ * （`data-shortcut-modal`、`role="switch"`、`aria-checked`、原生 `<nav>`），
+ * 不依赖任何 CSS Module 哈希类名，官方升级后最坏也只是静默回落到官方原样。
  */
 
 // 由工厂注入的 require —— 解析来自页面的模块表，不打包任何 Harness Client 包。
@@ -22,6 +27,7 @@ const { Button, DisclosureRow, Modal, SegmentedControl, StateDot, Switch } = req
 const { createAppearanceController } = require('./appearance-runtime.js');
 const { AppearancePage } = require('./appearance-page.js');
 const { CSS: APPEARANCE_CSS } = require('./appearance-css.js');
+const { CSS: SETTINGS_CSS } = require('./settings-css.js');
 
 /** 注册到哪个 slot。整页用 `settings.section`；单条偏好才用 `settings.general.item`。 */
 const SLOT = 'settings.section';
@@ -928,7 +934,7 @@ function apply(ctx) {
   ctx.effect(() => {
     const tag = document.createElement('style');
     tag.dataset.plugin = 'dsh-cyberwhale';
-    tag.textContent = CSS + APPEARANCE_CSS;
+    tag.textContent = CSS + APPEARANCE_CSS + SETTINGS_CSS;
     document.head.appendChild(tag);
     return () => tag.remove();
   }, 'deskpet: styles');
