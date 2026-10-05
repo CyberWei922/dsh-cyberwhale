@@ -1,5 +1,6 @@
 'use strict';
 const { normalizeAppearance, tokensFor, GRADIENTS, palette, mix, readable, contrast } = require('../lib/appearance-model.cjs');
+const { applySettingsPlatform, clearSettingsPlatform } = require('./settings-platform.js');
 
 function findWallpaperFrames(doc) {
   // The published root outlet contains the three-column frame. Its overlay seat
@@ -14,6 +15,7 @@ function createAppearanceController(ctx, call) {
   let saved = null, draft = null, disposed = false, busy = false, recovering = false, loading = true, error = null;
   let tokenDisposer = null, tokenKey = '', imageId = null, imageURL = null, imageTask = 0;
   const layers = new Map();
+  const settingsTitles = new Map();
   let timer = null, observer = null, raf = null;
   const listeners = new Set();
   const hasTheme = typeof ctx.theme?.overrideTokens === 'function';
@@ -25,15 +27,36 @@ function createAppearanceController(ctx, call) {
     for (const [frame, layer] of layers) { layer.remove(); frame.removeAttribute('data-whale-wallpaper-frame'); }
     layers.clear();
   }
+  function paintSettingsTitles(enabled) {
+    const headers = new Set();
+    if (enabled) for (const panel of document.querySelectorAll('[data-shortcut-modal="settings"]')) {
+      const header = panel.querySelector(':scope > nav + div > div:first-child');
+      const title = panel.querySelector('nav button[aria-current="true"]')?.textContent?.trim();
+      if (!header || !title) continue;
+      headers.add(header);
+      if (!settingsTitles.has(header)) settingsTitles.set(header, header.getAttribute('data-whale-settings-title'));
+      if (header.getAttribute('data-whale-settings-title') !== title) header.setAttribute('data-whale-settings-title', title);
+    }
+    for (const [header, original] of settingsTitles) if (!headers.has(header)) {
+      if (original === null) header.removeAttribute('data-whale-settings-title');
+      else header.setAttribute('data-whale-settings-title', original);
+      settingsTitles.delete(header);
+    }
+  }
   function paintBackground() {
     if (disposed || !document.body) return;
     const config = current();
     const reduced = config?.reduceTransparency || window.matchMedia?.('(prefers-reduced-transparency: reduce)').matches;
     document.body.toggleAttribute('data-whale-glass-input', !!(config?.enabled && config.glassInput && !reduced));
-    // macOS 观感的设置面板同样跟随「美化」总开关，并在用户要求降低透明度时回落到官方原样。
-    document.body.toggleAttribute('data-whale-mac-settings', !!(config?.enabled && !reduced));
+    const settingsPlatform = applySettingsPlatform(document, { enabled: !!config?.enabled, reduced });
+    const macSettings = settingsPlatform === 'macos';
+    paintSettingsTitles(macSettings);
     const scheme = ctx.theme?.getTheme().active.colorScheme ?? 'light';
     const p = palette(config?.[scheme] ?? normalizeAppearance()[scheme]);
+    // macOS sidebar selection uses a light label. Keep the theme's accent hue,
+    // darkening bright seeds only enough for that label to remain readable.
+    if (macSettings) document.body.style.setProperty('--whale-mac-selection-fill', readable(p.accentFill, '#FFFFFF'));
+    else document.body.style.removeProperty('--whale-mac-selection-fill');
     const worst = mix(p.bg, contrast(p.fg, '#000000') > contrast(p.bg, '#000000') ? '#FFFFFF' : '#000000', 0.16);
     document.body.style.setProperty('--whale-glass-text', readable(p.fg, worst));
     const active = config?.enabled && config.background !== 'none' && !reduced
@@ -151,20 +174,25 @@ function createAppearanceController(ctx, call) {
     async setFontSize(value) { try { await ctx.theme.setFontSize(value); } catch (e) { error = e.message; emit(); } },
     dispose() {
       disposed = true; clearInterval(timer); if (raf !== null) cancelAnimationFrame(raf);
-      observer?.disconnect(); tokenDisposer?.(); removeLayers(); ++imageTask;
+      observer?.disconnect(); tokenDisposer?.(); removeLayers(); paintSettingsTitles(false); ++imageTask;
       if (imageURL) URL.revokeObjectURL(imageURL);
-      document.body?.removeAttribute('data-whale-glass-input'); document.body?.removeAttribute('data-whale-mac-settings'); document.body?.style.removeProperty('--whale-glass-text'); listeners.clear();
+      clearSettingsPlatform(document);
+      document.body?.removeAttribute('data-whale-glass-input'); document.body?.style.removeProperty('--whale-glass-text'); document.body?.style.removeProperty('--whale-mac-selection-fill'); listeners.clear();
     },
   };
   if (hasTheme && document.body) {
     observer = new MutationObserver(records => {
       // Viewport CSS owns geometry: sidebar width/animation never changes it.
-      // Reconcile only when shell outlets or our decorative node change.
-      const selector = '[data-slot="root"], [data-slot="main"], [data-slot="sidebar"], [data-shell-overlay], .dsh-whale-wallpaper';
-      if (records.some(record => [...record.addedNodes, ...record.removedNodes].some(node =>
-        node.nodeType === 1 && (node.matches(selector) || node.querySelector(selector))))) schedulePaint();
+      // Also copy the active settings label into the CSS-rendered page heading.
+      const selector = '[data-slot="root"], [data-slot="main"], [data-slot="sidebar"], [data-shell-overlay], .dsh-whale-wallpaper, [data-shortcut-modal="settings"]';
+      if (records.some(record => record.attributeName === 'data-platform' || record.target.closest?.('[data-shortcut-modal="settings"]') ||
+        [...record.addedNodes, ...record.removedNodes].some(node =>
+          node.nodeType === 1 && (node.matches(selector) || node.querySelector(selector))))) schedulePaint();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-current'] });
+    // Handle a platform marker supplied after activation, without guessing an
+    // OS from browser UA or allowing macOS styles to flash on Windows.
+    if (document.documentElement) observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-platform'] });
     ctx.on('theme/change', () => { paintBackground(); emit(); });
     const media = window.matchMedia?.('(prefers-reduced-transparency: reduce)');
     media?.addEventListener('change', schedulePaint);

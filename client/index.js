@@ -15,8 +15,9 @@
  * 模块表里），因此开关、分段控件、按钮、状态点与官方设置页完全一致；
  * 行布局也照抄官方 `DeveloperToolsRow` 的尺寸与 token。
  *
- * 例外：设置面板本身在「美化」开启时会被 `client/settings-css.js` 改成 macOS 观感
- * （左导航磨砂、右侧不透明、开关与标签贴近系统设置）。那里只用官方语义锚点
+ * 例外：设置面板在「美化」开启时由 `client/settings-css.js` 按客户端系统选择样式。
+ * macOS 使用 `settings-macos-css.js`（左导航磨砂、右侧不透明、小型开关）。
+ * Windows 预留 `settings-windows-css.js`，暂用官方观感。这里只用官方语义锚点
  * （`data-shortcut-modal`、`role="switch"`、`aria-checked`、原生 `<nav>`），
  * 不依赖任何 CSS Module 哈希类名，官方升级后最坏也只是静默回落到官方原样。
  */

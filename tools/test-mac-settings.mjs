@@ -4,6 +4,7 @@ import { createReadStream } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import settingsCSS from '../client/settings-macos-css.js';
 
 /**
  * 设置面板 macOS 观感的锚点检查。
@@ -29,8 +30,9 @@ function check(name, condition, detail = '') {
 
 // 只看声明：注释里会举官方类名当反例，不该被当成「用了哈希类名」。
 const stripComments = text => text.replace(/\/\*[\s\S]*?\*\//g, '');
-const css = stripComments(await readFile(join(root, 'client', 'settings-css.js'), 'utf8'));
+const css = stripComments(settingsCSS.CSS);
 const runtime = await readFile(join(root, 'client', 'appearance-runtime.js'), 'utf8');
+const platformRuntime = await readFile(join(root, 'client', 'settings-platform.js'), 'utf8');
 const bundle = await readFile(join(root, 'lib', 'client.js'), 'utf8');
 
 // ── 1. 语义锚点必须在，且都必须能用 ────────────────────────────────
@@ -58,42 +60,46 @@ check('每条面板规则都带作用域门', ungated.length === 0, ungated.join
 // ── 4. 左右分界确实是「面板让出背景 + 两列各自负责」 ──────────────────
 check('面板本体让出背景', /\[data-shortcut-modal="settings"\][^{]*\{[^}]*background:transparent/.test(css));
 check('左列用 backdrop-filter 磨砂', />\s*nav\s*\{[^}]*backdrop-filter:blur\(/.test(css));
-check('右列保持不透明', />\s*nav\s*\+\s*div\s*\{[^}]*background:var\(--dsw-alias-bg-layer-2\)/.test(css));
+check('右列保持不透明', />\s*nav\s*\+\s*div\s*\{[^}]*background:var\(--whale-mac-content\)/.test(css));
 
 // 遮罩不做全屏模糊：面板直接浮现在应用内容上，这是明确要求过的行为。
 check('遮罩没有全屏模糊', !/:has\(>\s*\[data-shortcut-modal[^{]*\{[^}]*backdrop-filter/.test(css));
 
-// 选中项必须是「主题强调色填充 + 反色前景」，两个颜色都取自主题派生的 token。
-check('选中项用强调色填充', /nav button\[aria-current="true"\]\s*\{[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
-check('选中项用反色前景', /nav button\[aria-current="true"\]\s*\{[^}]*color:var\(--dsw-alias-label-primary-foreground\)/.test(css));
+// Selection keeps the theme accent hue, adjusted for a macOS-style white label.
+check('选中项用可读的主题强调色填充', /nav button\[aria-current="true"\]\s*\{[^}]*background:var\(--whale-mac-selection-fill/.test(css));
+check('选中项用浅色前景', /nav button\[aria-current="true"\]\s*\{[^}]*color:#fff/.test(css));
 
-// ── 5. macOS 开关：只改形状，颜色一律交给主题 ─────────────────────────
-// 官方 36×20 / 内缩 2 / 滑块 16 / 开启态 translateX(16)。我们改成
-// 31×14 / 内缩 1.5 / 滑块 11，行程变成 17，所以必须同步覆盖 translateX。
-// 这里连颜色一起守住：形状规则里出现任何颜色声明就说明主题色被写死了。
+// ── 5. 参考截图的开关：36×16 轨道、21×13 胶囊滑块、12px 行程 ───────────
+// Previously the track was shortened but the host's circular, theme-colored
+// thumb survived. Guard the capsule geometry and its independent neutral fill.
 const switchBlock = /\[role="switch"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
 const width = Number(/width:([\d.]+)px/.exec(switchBlock)?.[1]);
 const height = Number(/height:([\d.]+)px/.exec(switchBlock)?.[1]);
 const padding = Number(/padding:([\d.]+)px/.exec(switchBlock)?.[1]);
 const thumb = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*width:([\d.]+)px/.exec(css)?.[1]);
+const thumbHeight = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*height:([\d.]+)px/.exec(css)?.[1]);
 const travel = Number(/\[aria-checked="true"\]\s*>\s*span\s*\{[^}]*translateX\(([\d.]+)px\)/.exec(css)?.[1]);
 check('开关几何取到了值', [width, height, padding, thumb, travel].every(Number.isFinite),
   `${width}/${height}/${padding}/${thumb}/${travel}`);
 check('开关行程与覆盖的 translateX 一致', width - 2 * padding - thumb === travel,
   `轨道 ${width} - 内缩 ${padding}*2 - 滑块 ${thumb} = ${width - 2 * padding - thumb}，translateX ${travel}`);
 check('开关比例贴近 macOS（宽高比约 2.25）', Math.abs(width / height - 2.25) < 0.1, `${(width / height).toFixed(2)}`);
-check('开关形状规则里不写颜色（开启态主题色由官方 token 提供）',
-  !/(?:^|;|\s)(?:background|background-color|color)\s*:/.test(switchBlock) && !/#[0-9a-fA-F]{3,8}/.test(switchBlock),
-  switchBlock.trim().slice(0, 120));
+check('滑块为扁长胶囊且上下内缩一致', thumb > thumbHeight && thumbHeight + padding * 2 === height);
+check('开启态跟随主题强调色', /\[role="switch"\]\[aria-checked="true"\]\s*\{[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
+check('滑块使用独立浅色，而不是主题反色文字', /\[role="switch"\]\s*>\s*span\s*\{[^}]*background:var\(--whale-mac-thumb\)/.test(css));
 
 // ── 6. 降级规则：降低透明度与不支持 backdrop-filter 时都要回落实色 ──────
 check('含 prefers-reduced-transparency 回退', css.includes('prefers-reduced-transparency:reduce'));
 check('含 backdrop-filter 不支持时的回退', css.includes('@supports not (backdrop-filter:blur(1px))'));
+check('含减少动态效果适配', css.includes('prefers-reduced-motion:reduce'));
+check('分组不依赖官方哈希类名或 DOM 重排', css.includes(':has(> div > [role="switch"])') && css.includes('background-size:calc(100% - 32px) 1px'));
 
-// ── 7. 运行时开关：跟随美化总开关，并在降低透明度时回落到官方原样 ───────
-check('运行时切换 data-whale-mac-settings', runtime.includes("toggleAttribute('data-whale-mac-settings'"));
-check('开关门控为 enabled 且非降低透明度', /toggleAttribute\('data-whale-mac-settings',\s*!!\(config\?\.enabled && !reduced\)\)/.test(runtime));
-check('释放时移除该属性', /removeAttribute\('data-whale-mac-settings'\)/.test(runtime));
+// ── 7. 运行时开关：减少透明保留几何，只关闭磨砂 ──────────────────────
+check('运行时按客户端平台选择样式', runtime.includes('applySettingsPlatform(document, { enabled: !!config?.enabled, reduced })'));
+check('macOS 样式门控只用于 macOS', platformRuntime.includes("toggleAttribute('data-whale-mac-settings', platform === 'macos')"));
+check('减少透明单独控制 macOS 材质', platformRuntime.includes("platform === 'macos' && !!reduced"));
+check('释放时清除平台属性', runtime.includes('clearSettingsPlatform(document)') && platformRuntime.includes("removeAttribute('data-whale-mac-settings')"));
+check('释放时移除减少透明属性', platformRuntime.includes("removeAttribute('data-whale-mac-settings-reduced')"));
 
 // ── 8. 构建产物确实带上了这份 CSS ─────────────────────────────────
 check('产物含 data-whale-mac-settings', bundle.includes('data-whale-mac-settings'));
