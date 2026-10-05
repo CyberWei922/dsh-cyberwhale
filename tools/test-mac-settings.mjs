@@ -38,6 +38,7 @@ const anchors = [
   ['面板根属性', 'data-shortcut-modal="settings"'],
   ['左侧导航列（原生 nav）', '> nav'],
   ['右侧内容列（nav 的相邻兄弟）', '> nav + div'],
+  ['选中的导航项', 'nav button[aria-current="true"]'],
   ['开关基元', '[role="switch"]'],
   ['开关状态写在 aria-checked 上', '[aria-checked="true"]'],
   ['字段标签', 'label'],
@@ -59,14 +60,31 @@ check('面板本体让出背景', /\[data-shortcut-modal="settings"\][^{]*\{[^}]
 check('左列用 backdrop-filter 磨砂', />\s*nav\s*\{[^}]*backdrop-filter:blur\(/.test(css));
 check('右列保持不透明', />\s*nav\s*\+\s*div\s*\{[^}]*background:var\(--dsw-alias-bg-layer-2\)/.test(css));
 
-// ── 5. macOS 开关的几何：行程必须仍等于官方那条 translateX(16px) ──────
-// 官方 36×20 / 滑块 16 / 行程 16。我们改成 40×24 / 滑块 20 后行程仍是 16，
-// 所以不需要覆盖官方 transform；一旦这里对不上，开关会滑不到位。
-const width = Number(/\[role="switch"\]\s*\{[^}]*width:(\d+)px/.exec(css)?.[1]);
-const height = Number(/\[role="switch"\]\s*\{[^}]*height:(\d+)px/.exec(css)?.[1]);
-const thumb = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*width:(\d+)px/.exec(css)?.[1]);
-check('开关几何取到了值', Number.isFinite(width) && Number.isFinite(height) && Number.isFinite(thumb));
-check('开关行程与官方的 translateX(16px) 一致', width - 2 * 2 - thumb === 16, `实际 ${width - 4 - thumb}px`);
+// 遮罩不做全屏模糊：面板直接浮现在应用内容上，这是明确要求过的行为。
+check('遮罩没有全屏模糊', !/:has\(>\s*\[data-shortcut-modal[^{]*\{[^}]*backdrop-filter/.test(css));
+
+// 选中项必须是「主题强调色填充 + 反色前景」，两个颜色都取自主题派生的 token。
+check('选中项用强调色填充', /nav button\[aria-current="true"\]\s*\{[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
+check('选中项用反色前景', /nav button\[aria-current="true"\]\s*\{[^}]*color:var\(--dsw-alias-label-primary-foreground\)/.test(css));
+
+// ── 5. macOS 开关：只改形状，颜色一律交给主题 ─────────────────────────
+// 官方 36×20 / 内缩 2 / 滑块 16 / 开启态 translateX(16)。我们改成
+// 31×14 / 内缩 1.5 / 滑块 11，行程变成 17，所以必须同步覆盖 translateX。
+// 这里连颜色一起守住：形状规则里出现任何颜色声明就说明主题色被写死了。
+const switchBlock = /\[role="switch"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+const width = Number(/width:([\d.]+)px/.exec(switchBlock)?.[1]);
+const height = Number(/height:([\d.]+)px/.exec(switchBlock)?.[1]);
+const padding = Number(/padding:([\d.]+)px/.exec(switchBlock)?.[1]);
+const thumb = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*width:([\d.]+)px/.exec(css)?.[1]);
+const travel = Number(/\[aria-checked="true"\]\s*>\s*span\s*\{[^}]*translateX\(([\d.]+)px\)/.exec(css)?.[1]);
+check('开关几何取到了值', [width, height, padding, thumb, travel].every(Number.isFinite),
+  `${width}/${height}/${padding}/${thumb}/${travel}`);
+check('开关行程与覆盖的 translateX 一致', width - 2 * padding - thumb === travel,
+  `轨道 ${width} - 内缩 ${padding}*2 - 滑块 ${thumb} = ${width - 2 * padding - thumb}，translateX ${travel}`);
+check('开关比例贴近 macOS（宽高比约 2.25）', Math.abs(width / height - 2.25) < 0.1, `${(width / height).toFixed(2)}`);
+check('开关形状规则里不写颜色（开启态主题色由官方 token 提供）',
+  !/(?:^|;|\s)(?:background|background-color|color)\s*:/.test(switchBlock) && !/#[0-9a-fA-F]{3,8}/.test(switchBlock),
+  switchBlock.trim().slice(0, 120));
 
 // ── 6. 降级规则：降低透明度与不支持 backdrop-filter 时都要回落实色 ──────
 check('含 prefers-reduced-transparency 回退', css.includes('prefers-reduced-transparency:reduce'));
