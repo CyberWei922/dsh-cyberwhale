@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('petHost', {
 
   /** 订阅宿主提炼好的气泡内容；空字符串表示清空，回到碎碎念。 */
   onBubble: (listener) => ipcRenderer.on('pet:bubble', (_event, value) => listener(value)),
+  /** 原生气泡材质由主进程创建，网页只同步自身矩形。 */
+  onGlass: (listener) => ipcRenderer.on('pet:glass', (_event, value) => listener(value)),
+  reportBubbleFrame: (value) => ipcRenderer.send('pet:bubble-frame', value),
 
   /** 主进程请求回报气泡/宠物的实际位置（调试用）。 */
   onProbe: (listener) => ipcRenderer.on('pet:probe', () => listener()),

@@ -72,7 +72,6 @@ const ANIMATIONS = {
 
 /** 状态 → 气泡文案。 */
 const BUBBLES = {
-  idle: ['在这儿呢', '慢慢来', '陪你'],
   running: ['正在处理…', '交给我', '盯着呢'],
   waiting: ['需要你确认', '等你一下', '看一眼这里'],
   review: ['检查一下', '我看看'],
@@ -134,7 +133,7 @@ const state = {
   visualScale: host?.config?.scale ?? 1,
   bubbleKey: null,
   bubbleUntil: 0,
-  /** 实时层的两行：会话标题 + 任务状态。status 为空表示没有，回落到碎碎念。 */
+  /** 实时层的两行：会话标题 + 任务状态。status 为空时，待机保持安静。 */
   liveTitle: '',
   liveStatus: '',
   /** 兜底回落时间。正常由宿主在 turn 结束时明确清空，这个只是防上游异常消失。 */
@@ -312,6 +311,8 @@ let bubbleMotion = null;
 let bubbleWidthCache = null;
 let bubbleTransformCache = null;
 let bubbleBounds = null;
+let nativeBubbleGlassActive = false;
+let nativeBubbleFrameKey = null;
 
 /** 解析积分临界阻尼弹簧；帧率变化或中途反向时也保持连续的位置和速度。 */
 function stepBubbleAxis(axis, target, dt) {
@@ -426,6 +427,12 @@ function positionBubble(dt = 16) {
   bubble.dataset.side = side;
   const tailX = Math.min(Math.max(petCenter - bubbleMotion.x.value, BUBBLE_TAIL_INSET), size.width - BUBBLE_TAIL_INSET);
   bubble.style.setProperty('--bubble-tail-x', `${tailX.toFixed(3)}px`);
+  if (nativeBubbleGlassActive) {
+    const value = { left: Number(bubbleMotion.x.value.toFixed(3)), top: Number(bubbleMotion.y.value.toFixed(3)),
+      width: size.width, height: size.height, visible: bubble.dataset.visible === '1' };
+    const key = JSON.stringify(value);
+    if (key !== nativeBubbleFrameKey) { nativeBubbleFrameKey = key; host.reportBubbleFrame?.(value); }
+  }
 }
 
 /** 命中矩形（已按 alpha 包围盒内缩）。 */
@@ -571,7 +578,7 @@ function hideBubble() {
 /**
  * 气泡分两层：
  *   1. **实时层** —— 宿主从推理流里提炼的进度句（压过碎碎念）
- *   2. **碎碎念层** —— 原有的固定短语池，空闲/回落时用
+ *   2. **短语层** —— 工作状态及完成、失败、打招呼的提示；待机不自动说话
  */
 function updateBubble(now) {
   if (!state.bubbles) {
@@ -593,7 +600,13 @@ function updateBubble(now) {
     bubble.dataset.live = '0';
   }
 
-  // ── 碎碎念层 ──────────────────────────────────────────────────────────
+  // 待机只保留眨眼和注视。实时任务提示在上方处理，不受此规则影响。
+  if (state.animation === 'idle') {
+    hideBubble();
+    return;
+  }
+
+  // ── 短语层 ────────────────────────────────────────────────────────────
   const transient = state.animation === 'jumping' || state.animation === 'failed' || state.animation === 'waving';
   const key = `${state.animation}:${Math.floor(now / 6000)}`;
 
@@ -748,6 +761,7 @@ host.onProbe(() => {
     bubble: rectOf(bubble),
     bubbleSide: bubble.dataset.side ?? null,
     bubbleVisible: bubble.dataset.visible ?? null,
+    bubbleGlassActive: nativeBubbleGlassActive,
     bubbleTarget: bubbleFrameCache,
     bubbleBounds,
     bubbleOpacity: Number(getComputedStyle(bubble).opacity),
@@ -771,11 +785,18 @@ host.onLayout((value) => {
 
 host.onBubble((payload) => {
   // 宿主发来的两行任务状态：第一行会话标题，第二行「正在运行命令 · npm test」。
-  // status 为空串表示清空，回落到碎碎念。
+  // status 为空串表示清空实时提示；待机时隐藏气泡。
   state.liveTitle = typeof payload?.title === 'string' ? payload.title : '';
   state.liveStatus = typeof payload?.status === 'string' ? payload.status : '';
   state.liveUntil = state.liveStatus === '' ? 0 : performance.now() + LIVE_HOLD_MS;
   if (state.liveStatus === '') bubble.dataset.live = '0';
+});
+
+host.onGlass?.((value) => {
+  nativeBubbleGlassActive = value?.active === true;
+  bubble.dataset.glass = nativeBubbleGlassActive ? '1' : '0';
+  nativeBubbleFrameKey = null;
+  positionBubble(0);
 });
 
 host.onConfig((config) => {

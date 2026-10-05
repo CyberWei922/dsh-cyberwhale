@@ -156,6 +156,12 @@ body {
   }
 }
 
+/* After native glass is confirmed, HTML contributes text only. AppKit owns the
+ * neutral material and edge highlights; don't obscure it with a colored veil.
+ * Unsupported systems and a disabled switch retain the original solid bubble. */
+#bubble[data-glass='1'] {background:transparent;box-shadow:none;transition:none}
+#bubble[data-glass='1']::after {display:none}
+
 /* 素材缺失时的提示（只在开发/出错时出现） */
 #fallback {
   position: absolute;

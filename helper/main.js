@@ -37,6 +37,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Socket } = require('node:net');
 const { app, BrowserWindow, Menu, ipcMain, nativeTheme, screen } = require('electron');
+const { createBubbleGlass } = require('./bubble-glass.js');
 
 // ── 进程外观：不进 Dock、不进 Cmd+Tab ──────────────────────────────────────
 // 这两步是整个方案里唯一能解决「Electron 进程会在 Dock 留图标」的地方。
@@ -63,6 +64,9 @@ const assetsDir = readArg('assets', path.join(__dirname, '..', 'assets'));
 let scale = clamp(Number(readArg('scale', '1')) || 1, 0.45, 1.6);
 const lookAtCursor = readArg('look-at-cursor', '1') === '1';
 const bubbles = readArg('bubbles', '1') === '1';
+let bubbleGlassRequested = readArg('bubble-glass', '0') === '1';
+let bubblesEnabled = bubbles;
+let bubbleGlassController = null;
 const startX = Number(readArg('x', 'NaN'));
 const startY = Number(readArg('y', 'NaN'));
 
@@ -198,6 +202,15 @@ function createWindow() {
     },
   });
 
+  bubbleGlassController = createBubbleGlass(win, {
+    isDark: () => nativeTheme.shouldUseDarkColors,
+    publish: value => {
+      if (win && !win.isDestroyed()) win.webContents.send('pet:glass', value);
+      toHost({ t: 'bubble-glass', ...value });
+    },
+  });
+  bubbleGlassController.configure(bubbleGlassRequested, bubblesEnabled);
+
   win.setAlwaysOnTop(true, 'floating');
   if (process.platform === 'darwin') {
     // macOS 专用：跨所有 Space（含全屏 Space）。
@@ -236,6 +249,8 @@ function createWindow() {
   });
 
   win.on('closed', () => {
+    bubbleGlassController?.dispose();
+    bubbleGlassController = null;
     win = null;
   });
 
@@ -252,6 +267,7 @@ function createWindow() {
   win.webContents.on('did-finish-load', () => {
     lastLayoutKey = null;
     emitLayout();
+    bubbleGlassController?.configure(bubbleGlassRequested, bubblesEnabled, true);
   });
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -520,6 +536,10 @@ ipcMain.on('pet:renderer-error', (_event, message) => {
   toHost({ t: 'log', level: 'error', msg: String(message) });
 });
 ipcMain.on('pet:moved-by-user', () => reportPosition());
+ipcMain.on('pet:bubble-frame', (event, value) => {
+  if (win && !win.isDestroyed() && event.sender === win.webContents) bubbleGlassController?.update(value);
+});
+nativeTheme.on('updated', () => bubbleGlassController?.configure());
 // 渲染层对 pet:probe 的回答，转给宿主
 ipcMain.on('pet:probe-result', (_event, data) => {
   if (win === null || win.isDestroyed()) return;
@@ -529,7 +549,7 @@ ipcMain.on('pet:probe-result', (_event, data) => {
     x: Math.round(x + pet.left + pet.width / 2),
     y: Math.round(y + pet.top + pet.height / 2),
   }).workArea;
-  toHost({ t: 'probe', ...(data ?? {}), windowPosition: { x, y }, workArea });
+  toHost({ t: 'probe', ...(data ?? {}), windowPosition: { x, y }, workArea, nativeBubbleGlass: bubbleGlassController?.snapshot() });
 });
 
 // ── IPC：主进程 → 渲染进程（由 stdin 驱动）─────────────────────────────────
@@ -552,6 +572,9 @@ function dispatch(message) {
     case 'config':
       // 窗口尺寸固定，缩放只是把内容画大/画小（渲染层做缓动）。
       if (message.scale !== undefined && message.scale !== null) applyScale(message.scale);
+      if (typeof message.bubbleGlass === 'boolean') bubbleGlassRequested = message.bubbleGlass;
+      if (typeof message.bubbles === 'boolean') bubblesEnabled = message.bubbles;
+      bubbleGlassController?.configure(bubbleGlassRequested, bubblesEnabled);
       win.webContents.send('pet:config', {
         scale,
         lookAtCursor: message.lookAtCursor,
@@ -675,6 +698,7 @@ if (process.platform === 'win32' && process.env.DSH_SUBPROCESS_CONTROL === 'pipe
 
 let quitting = false;
 function quit() {
+  bubbleGlassController?.dispose();
   if (quitting) return;
   quitting = true;
   stopCursorTracking();

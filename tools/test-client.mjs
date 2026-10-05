@@ -10,6 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import appearanceModel from '../lib/appearance-model.cjs';
 
 const pluginRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -173,6 +174,7 @@ const primitivesMock = {
   StateDot: stub('StateDot'),
   Modal: stub('Modal'),
   DisclosureRow: stub('DisclosureRow'),
+  IconChevronDownOutlineRegular: stub('IconChevronDownOutlineRegular'),
 };
 
 /** 把元素树摊平成节点数组（节点形如 { type, props, children }）。 */
@@ -290,6 +292,10 @@ check('order 在最下方', registration?.options?.order, 90);
 check('label 是函数（可跟随语言）', typeof registration?.options?.label, 'function');
 check('label 返回分区名', registration?.options?.label(), '桌宠');
 check('注册传入了组件', typeof registration?.component, 'function');
+const themeRegistration = slotRegistrations.find(item => item?.options?.id === 'dsh-cyberwhale-theme');
+check('主题是独立设置页', themeRegistration?.options?.name, 'settings.section');
+check('主题导航显示正确', themeRegistration?.options?.label(), '主题');
+check('主题页排在桌宠后', themeRegistration?.options?.order, 91);
 check('注入了样式标签', styleTags.length, styleBefore + 1);
 check('样式标签带插件标记', styleTags.at(-1)?.dataset?.plugin, 'dsh-cyberwhale');
 
@@ -356,7 +362,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
       },
       register: (options, component) => {
         // 按 slot 名收集：插件现在会注册好几个 slot，只留「最后一个」会串味。
-        (ctxDriven._registrations ??= {})[options.name] = { options, component };
+        (ctxDriven._registrations ??= {})[options.name === 'settings.section' ? options.id : options.name] = { options, component };
         return () => {};
       },
     },
@@ -379,7 +385,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
   };
 
   plugin.apply(ctxDriven);
-  const element = ctxDriven._registrations['settings.section'].component();
+  const element = ctxDriven._registrations['dsh-cyberwhale'].component();
   const runtime = createHookRuntime(element.type, element.props);
 
   const collectByType = (node, type, out = []) => {
@@ -402,7 +408,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
   const segmentsOf = (root) => collectByType(root, 'primitive:SegmentedControl');
   const byLabel = (root, label) => switchesOf(root).find((node) => node.props.label === label);
 
-  check('渲染出 3 个开关', switchesOf(tree).length, 3);
+  check('渲染出 4 个开关', switchesOf(tree).length, 4);
   check('渲染出 1 个分段控件', segmentsOf(tree).length, 1);
   check('初始状态没有控件被禁用', [...switchesOf(tree), ...segmentsOf(tree)].every((n) => n.props.disabled !== true), true);
 
@@ -415,6 +421,7 @@ console.log('\n[4c] 写入时只禁用当前控件（回归）');
   check('【关键】启用开关没有被一起禁用', byLabel(tree, '启用桌宠').props.disabled, false);
   check('【关键】眼睛跟随开关没有被一起禁用', byLabel(tree, '看向鼠标').props.disabled, false);
   check('【关键】气泡开关没有被一起禁用', byLabel(tree, '气泡提示').props.disabled, false);
+  check('气泡液态玻璃开关没有被一起禁用', byLabel(tree, '气泡液态玻璃').props.disabled, false);
 
   // 请求完成 → 全部恢复
   pendingMutation();
@@ -476,7 +483,7 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
           return () => {};
         },
         register: (options, component) => {
-          (ctxDriven._registrations ??= {})[options.name] = { options, component };
+          (ctxDriven._registrations ??= {})[options.name === 'settings.section' ? options.id : options.name] = { options, component };
           return () => {};
         },
       },
@@ -495,7 +502,7 @@ console.log('\n[4d] 「运行环境」行（一键准备运行时的入口）');
       },
     };
     plugin.apply(ctxDriven);
-    const element = ctxDriven._registrations['settings.section'].component();
+    const element = ctxDriven._registrations['dsh-cyberwhale'].component();
     const hookRuntime = createHookRuntime(element.type, element.props);
     let tree = hookRuntime.render();
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -596,7 +603,7 @@ console.log('\n[4e] 插件页：启用引导弹窗（plugins.bundle.activation�
           return () => {};
         },
         register: (options, component) => {
-          (ctxDriven._registrations ??= {})[options.name] = { options, component };
+          (ctxDriven._registrations ??= {})[options.name === 'settings.section' ? options.id : options.name] = { options, component };
           return () => {};
         },
       },
@@ -686,7 +693,7 @@ console.log('\n[4f] 插件页：详情页准备面板（plugins.bundle.config）
           return () => {};
         },
         register: (options, component) => {
-          (ctxDriven._registrations ??= {})[options.name] = { options, component };
+          (ctxDriven._registrations ??= {})[options.name === 'settings.section' ? options.id : options.name] = { options, component };
           return () => {};
         },
       },
@@ -809,6 +816,139 @@ console.log('\n[4f] 插件页：详情页准备面板（plugins.bundle.config）
   check('就绪时显示已就绪', JSON.stringify(doneNodes).includes('运行环境已就绪'), true);
   check('就绪时不再提供下载按钮', buttonsOf(doneNodes).map(labelOfButton).includes('下载并准备'), false);
   done.dispose();
+}
+
+console.log('\n[4g] 背景设置：模式切换、空图片与按需展开');
+{
+  let config = appearanceModel.normalizeAppearance(), edits = 0;
+  const listeners = new Set();
+  const controller = {
+    getState: () => ({ config, loading: false, recovering: false, available: true,
+      theme: { preference: 'light', active: { colorScheme: 'light' }, fontSize: 14 } }),
+    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    edit(patch) { config = appearanceModel.normalizeAppearance({ ...config, ...patch }); edits++; for (const fn of listeners) fn(); },
+  };
+  const element = themeRegistration.component();
+  const page = createHookRuntime(element.type, { controller });
+  let background = null, backgroundProps = null, backgroundKey = null;
+  // Keep component hook states and remount on React's actual key changes.
+  const view = () => {
+    const node = flattenNodes(page.render()).find(n => typeof n.props.changeBackground === 'function');
+    if (!background || node.props.key !== backgroundKey) {
+      background?.dispose(); backgroundKey = node.props.key; backgroundProps = { ...node.props };
+      background = createHookRuntime(node.type, backgroundProps);
+    } else Object.assign(backgroundProps, node.props);
+    // Represents already-computed upload candidates, without reading local files.
+    backgroundProps.sources = ['#26707A']; backgroundProps.sourceImage = config.wallpaper?.id ?? null;
+    return flattenNodes(background.render());
+  };
+  const segment = nodes => nodes.find(n => n.type === primitivesMock.SegmentedControl);
+  const button = (nodes, text) => nodes.find(n => n.type === primitivesMock.Button && n.children?.[0] === text);
+  const disclosure = (nodes, title) => nodes.find(n => n.type === primitivesMock.DisclosureRow && n.props.title === title);
+  const ranges = nodes => nodes.filter(n => n.type === 'input' && n.props.type === 'range');
+  const image = { id: 'a'.repeat(64), name: 'fixture.png' };
+  let nodes = view();
+  check('尚未上传时图片选项可以选择', segment(nodes).props.options.find(o => o.value === 'image').disabled === true, false);
+  check('纯色不展示上传、渐变或效果控件', nodes.some(n => n.props.type === 'file' || n.props.className === 'dsh-appearance-gradient' || n.type === primitivesMock.DisclosureRow), false);
+  segment(nodes).props.onChange('image'); nodes = view();
+  check('无图片时选中图片模式不会跳回纯色', config.background, 'image');
+  check('空图片模式显示选择图片入口', button(nodes, '选择图片') !== undefined, true);
+  check('空图片模式不显示预览、布局或效果', nodes.some(n => n.type === 'img' || n.type === 'select' || n.type === primitivesMock.DisclosureRow), false);
+
+  controller.edit({ wallpaper: image }); nodes = view();
+  const themeBefore = JSON.stringify([config.light, config.dark]);
+  check('有图片时显示预览和布局', nodes.some(n => n.type === 'img') && nodes.filter(n => n.type === 'select').length === 2, true);
+  check('效果调整和图片取色默认折叠', [disclosure(nodes, '效果调整').props.open, disclosure(nodes, '从图片生成配色').props.open], [false, false]);
+  check('折叠时不渲染滑块和候选主色', ranges(nodes).length === 0 && !nodes.some(n => n.props.className === 'dsh-appearance-swatches'), true);
+  disclosure(nodes, '效果调整').props.onToggle(); nodes = view();
+  check('展开效果后显示遮罩和模糊', ranges(nodes).map(n => n.props['aria-label']), ['背景遮罩', '背景模糊']);
+  ranges(nodes).find(n => n.props['aria-label'] === '背景遮罩').props.onChange({ target: { value: '88' } });
+  nodes = view();
+  disclosure(nodes, '从图片生成配色').props.onToggle(); nodes = view();
+  check('展开图片取色后显示候选主色', nodes.some(n => n.props.className === 'dsh-appearance-swatches'), true);
+  check('仅展开取色不会改变主题配色', JSON.stringify([config.light, config.dark]), themeBefore);
+  const beforePick = edits;
+  nodes.find(n => n.props['aria-label'] === '应用图片主色 #26707A').props.onClick();
+  check('点击主色才应用配套浅深配色', config.light.preset === 'custom' && config.dark.preset === 'custom' && edits === beforePick + 1, true);
+
+  nodes = view(); segment(nodes).props.onChange('gradient'); nodes = view();
+  nodes.find(n => n.props['aria-label'] === '海岸渐变').props.onClick(); nodes = view();
+  check('渐变模式只显示渐变和遮罩', nodes.filter(n => n.props.className === 'dsh-appearance-gradient').length === 3 && ranges(nodes).length === 1 && !nodes.some(n => n.props.type === 'file' || n.type === 'img' || n.type === primitivesMock.DisclosureRow), true);
+  check('切换渐变保留已上传图片', config.wallpaper.id, image.id);
+  segment(nodes).props.onChange('none'); nodes = view();
+  check('有图片时切回纯色也不展示图片设置', nodes.some(n => n.props.type === 'file' || n.type === 'img' || n.type === primitivesMock.DisclosureRow), false);
+  segment(nodes).props.onChange('image'); nodes = view();
+  check('切回图片保留图片、渐变与效果参数', [config.wallpaper.id, config.gradient, config.mask], [image.id, 'sea', 88]);
+  check('切回图片附加功能重新折叠', [disclosure(nodes, '效果调整').props.open, disclosure(nodes, '从图片生成配色').props.open], [false, false]);
+  button(nodes, '移除').props.onClick(); nodes = view();
+  check('移除后留在图片模式并恢复上传区域', config.background === 'image' && config.wallpaper === null && button(nodes, '选择图片') !== undefined, true);
+  background.dispose(); page.dispose();
+}
+
+console.log('\n[4h] 系统字体：自动读取、即时应用与失败回退');
+{
+  let config = appearanceModel.normalizeAppearance({ uiFont: 'Old Font, sans-serif' }), reads = 0;
+  const controller = { getState: () => ({ config, loading: false, recovering: false, available: true, theme: { fontSize: 14 } }), subscribe: () => () => {} };
+  const element = themeRegistration.component();
+  const page = createHookRuntime(element.type, { controller });
+  const node = flattenNodes(page.render()).find(n => n.type?.name === 'FontSettings');
+  const props = { ...node.props, edit(patch) { config = appearanceModel.normalizeAppearance({ ...config, ...patch }); props.config = config; } };
+  let fonts = createHookRuntime(node.type, props);
+  const view = () => flattenNodes(fonts.render());
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+  const reopen = () => { fonts.dispose(); fonts = createHookRuntime(node.type, props); return view(); };
+  const picker = (nodes, name) => nodes.find(n => n.type === 'select' && n.props['aria-label'] === name);
+  const names = select => flattenNodes(select.children).filter(n => n.type === 'option').map(n => n.children[0]);
+  const read = nodes => nodes.find(n => n.type === primitivesMock.Button).props.onClick();
+  let resolveRead;
+  sandbox.queryLocalFonts = () => { reads++; return new Promise(resolve => { resolveRead = resolve; }); };
+  let nodes = view();
+  check('进入页面自动读取字体，无需点击', reads, 1);
+  check('字体默认使用下拉框，保留旧版手填值', names(picker(nodes, '界面字体')), ['系统默认', 'Old Font, sans-serif（当前）']);
+  view();
+  check('读取过程中去重请求', reads, 1);
+  check('正常读取时不显示手动刷新按钮', view().some(n => n.type === primitivesMock.Button), false);
+  resolveRead([{ family: 'PingFang SC', style: 'Regular' }, { family: 'PingFang SC', style: 'Bold' }, { family: 'Consolas' }, { family: 'Noto Sans CJK SC' }, { family: 'Example, Serif (UI)' }, { family: '宋体' }, { family: '' }]);
+  await settle(); nodes = view();
+  check('按家族去重，中文与带标点的字体均可选择', names(picker(nodes, '代码字体')).length, 6);
+  picker(nodes, '界面字体').props.onChange({ target: { value: '"Example, Serif (UI)"' } });
+  check('选择后立即保存为单个字体名', config.uiFont, '"Example, Serif (UI)"');
+  nodes = view();
+  picker(nodes, '代码字体').props.onChange({ target: { value: '"Consolas"' } });
+  check('界面与代码字体分别保存', [config.uiFont, config.codeFont], ['"Example, Serif (UI)"', '"Consolas"']);
+  picker(view(), '界面字体').props.onChange({ target: { value: '' } });
+  check('选择系统默认清除覆盖', config.uiFont, '');
+  props.disabled = true; view(); props.disabled = false; view();
+  check('页面内临时禁用后恢复，不重复请求字体', reads, 1);
+  sandbox.queryLocalFonts = async () => { reads++; return [{ family: 'Consolas' }, { family: 'Newly Installed' }]; };
+  reopen(); await settle(); nodes = view();
+  check('重新进入页面会刷新列表，包含新安装字体', reads === 2 && names(picker(nodes, '代码字体')).includes('Newly Installed'), true);
+  sandbox.queryLocalFonts = async () => { const e = new Error('denied'); e.name = 'NotAllowedError'; throw e; };
+  reopen(); await settle(); nodes = view();
+  check('拒绝权限后保留已有设置', config.codeFont, '"Consolas"');
+  check('拒绝权限有说明并提供手动输入', nodes.some(n => n.props.role === 'alert') && nodes.filter(n => String(n.props['aria-label']).startsWith('手动输入')).length === 2, true);
+  sandbox.queryLocalFonts = async () => [{ family: 'Consolas' }];
+  await read(view()); nodes = view();
+  check('重试成功收起备用输入', nodes.some(n => String(n.props['aria-label']).startsWith('手动输入')), false);
+  check('重试成功后收起重试入口', nodes.some(n => n.type === primitivesMock.Button), false);
+  sandbox.queryLocalFonts = async () => [];
+  reopen(); await settle();
+  check('空列表不清空已有配置', config.codeFont, '"Consolas"');
+  delete sandbox.queryLocalFonts;
+  await read(view());
+  check('不支持接口时可继续手动设置', view().some(n => n.props['aria-label'] === '手动输入代码字体'), true);
+  const pendingReads = [];
+  sandbox.queryLocalFonts = () => new Promise(resolve => pendingReads.push(resolve));
+  props.disabled = true; reopen();
+  check('页面尚未就绪时暂缓自动读取', pendingReads.length, 0);
+  props.disabled = false; view(); reopen();
+  check('页面就绪和重新进入各触发一次读取', pendingReads.length, 2);
+  pendingReads[0]([{ family: 'Old Result' }]); await settle();
+  check('关闭页面后的旧请求不会污染新页面', names(picker(view(), '界面字体')).includes('Old Result'), false);
+  pendingReads[1]([{ family: 'Fresh Result' }]); await settle();
+  check('新页面采用自己的读取结果', names(picker(view(), '界面字体')).includes('Fresh Result'), true);
+  delete sandbox.queryLocalFonts;
+  fonts.dispose(); page.dispose();
 }
 
 console.log('\n[5] 组件内部的 RPC 调用');

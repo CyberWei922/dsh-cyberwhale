@@ -19,6 +19,9 @@
 // 由工厂注入的 require —— 解析来自页面的模块表，不打包任何 Harness Client 包。
 const React = require('react');
 const { Button, DisclosureRow, Modal, SegmentedControl, StateDot, Switch } = require('@deepseek-ai/dsh-client-ui-primitives');
+const { createAppearanceController } = require('./appearance-runtime.js');
+const { AppearancePage } = require('./appearance-page.js');
+const { CSS: APPEARANCE_CSS } = require('./appearance-css.js');
 
 /** 注册到哪个 slot。整页用 `settings.section`；单条偏好才用 `settings.general.item`。 */
 const SLOT = 'settings.section';
@@ -328,6 +331,8 @@ function WhalePetSection(props) {
   const scale = settings?.scale ?? 1;
   const lookAtCursor = settings?.lookAtCursor ?? true;
   const bubbles = settings?.bubbles ?? true;
+  const bubbleGlass = settings?.bubbleGlass ?? false;
+  const bubbleGlassState = runtime?.bubbleGlass;
   const runtimeSource = settings?.runtimeSource ?? 'mirror';
 
   const prepare = runtime?.prepare ?? null;
@@ -526,6 +531,19 @@ function WhalePetSection(props) {
         disabled: pending === 'bubbles' || !enabled,
         label: '气泡提示',
         onChange: (next) => void mutate('bubbles', 'updateSettings', { bubbles: next }),
+      }),
+    ),
+
+    row(
+      'bubbleGlass',
+      '气泡液态玻璃',
+      bubbleGlassState?.supported === false ? (bubbleGlassState.reason ?? '当前系统不支持，使用普通气泡。')
+        : bubbleGlassState?.reason ?? 'Apple 原生 Liquid Glass，仅支持 macOS 26 及以上；关闭后恢复普通气泡。',
+      h(Switch, {
+        checked: bubbleGlass,
+        disabled: pending === 'bubbleGlass' || !enabled || !bubbles || (bubbleGlassState?.supported === false && !bubbleGlass),
+        label: '气泡液态玻璃',
+        onChange: (next) => void mutate('bubbleGlass', 'updateSettings', { bubbleGlass: next }),
       }),
     ),
 
@@ -900,7 +918,7 @@ function RuntimeSetupPrompt(props) {
 }
 
 /** 需要的客户端服务。 */
-const inject = ['slots', 'connection'];
+const inject = ['slots', 'connection', 'theme'];
 
 /**
  * 注册设置页与自有样式。
@@ -910,7 +928,7 @@ function apply(ctx) {
   ctx.effect(() => {
     const tag = document.createElement('style');
     tag.dataset.plugin = 'dsh-cyberwhale';
-    tag.textContent = CSS;
+    tag.textContent = CSS + APPEARANCE_CSS;
     document.head.appendChild(tag);
     return () => tag.remove();
   }, 'deskpet: styles');
@@ -934,6 +952,13 @@ function apply(ctx) {
     // 目标 slot 未声明时只警告，绝不拖垮客户端启动。
     ctx.logger?.warn?.('桌宠设置页注册失败：%s', error instanceof Error ? error.message : String(error));
   }
+
+  const appearance = createAppearanceController(ctx, call);
+  ctx.effect(() => () => appearance.dispose(), 'deskpet: appearance');
+  ctx.slots.inject(SLOT, () => ctx.slots.register(
+    { name: SLOT, id: 'dsh-cyberwhale-theme', order: ORDER + 1, label: () => '主题' },
+    () => React.createElement(AppearancePage, { controller: appearance }),
+  ));
 
   // 插件页里的两个界面。两个 slot 都是 kind:keyed，**key 必须是包名**
   // （插件管理器按组合包名寻址），所以直接复用 SECTION_ID。

@@ -4,6 +4,8 @@ runtime/
 
 # 调研资料与第三方下载包（体积大、且是别人的代码，不入库）
 .research/
+# 会话临时调研产物（asar 转储、报错日志等，体积大且是一次性的过程文件）
+.dsh-research/
 reference/
 *.tgz
 

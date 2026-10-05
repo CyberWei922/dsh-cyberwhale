@@ -485,10 +485,11 @@ function rawRequest({ method, url, rejection, body }) {
     req.url = url;
     req.headers = {};
     let status = 0;
+    let headers = {};
     const chunks = [];
     const res = {
-      writeHead(code) { status = code; return this; },
-      end(data) { if (data !== undefined) chunks.push(String(data)); resolve({ status, body: chunks.join('') }); },
+      writeHead(code, values) { status = code; headers = values ?? {}; return this; },
+      end(data) { if (data !== undefined) chunks.push(String(data)); resolve({ status, body: chunks.join(''), headers }); },
     };
     if (rejection !== undefined) {
       const original = ctx.connection.requestRejection;
@@ -516,6 +517,26 @@ const okBody = await rawRequest({
 check('正常请求返回 200', okBody.status, 200);
 check('信封形状正确', JSON.parse(okBody.body).type, 'server-response');
 check('回显 rpcId', JSON.parse(okBody.body).rpcId, 'abc');
+
+console.log('\n[7b] 主题与鉴权壁纸');
+const beforeAppearance = (await rpc('getState')).value.settings;
+const appearanceInitial = (await rpc('getAppearance')).value;
+check('主题有独立配置', typeof appearanceInitial.revision, 'string');
+const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jFZkAAAAASUVORK5CYII=';
+const uploaded = await rpc('uploadWallpaper', { dataURL: imageData, name: 'test.png' });
+check('图片上传成功', uploaded.ok, true);
+const imageRoute = `/deskpet/appearance/wallpaper/${uploaded.value.id}`;
+check('未登录不能读取壁纸', (await rawRequest({ method: 'GET', url: imageRoute, rejection: 401 })).status, 401);
+check('跨站不能读取壁纸', (await rawRequest({ method: 'GET', url: imageRoute, rejection: 403 })).status, 403);
+const imageResponse = await rawRequest({ method: 'GET', url: imageRoute });
+check('本机能读取壁纸', imageResponse.status, 200);
+check('图片类型正确', imageResponse.headers['content-type'], 'image/png');
+check('拒绝非法资源路径', (await rawRequest({ method: 'GET', url: '/deskpet/appearance/wallpaper/not-an-id' })).status, 404);
+const appearanceUpdate = await rpc('updateAppearance', { revision: appearanceInitial.revision, config: { ...appearanceInitial.config, enabled: false, wallpaper: uploaded.value, background: 'image' } });
+check('主题能单独关闭', appearanceUpdate.value.config.enabled, false);
+check('关闭主题不更改桌宠设置', (await rpc('getState')).value.settings, beforeAppearance);
+check('过期主题草稿被拒绝', (await rpc('updateAppearance', { revision: appearanceInitial.revision, config: appearanceInitial.config })).ok, false);
+check('拒绝可执行图片格式', (await rpc('uploadWallpaper', { dataURL: 'data:image/svg+xml;base64,PHN2Zz4=' })).ok, false);
 
 console.log('\n[8] 释放');
 const liveBeforeDispose = spawnedHandles.filter((h) => h.terminated !== true).length;

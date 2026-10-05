@@ -55,7 +55,7 @@ try {
     if (!elements.has(id)) elements.set(id, {
       dataset: {}, style: { setProperty(name, value) { this[name] = value; } },
       offsetWidth: BUBBLE_WIDTH, offsetHeight: 32,
-      getContext: () => ({ setTransform() {} }), getBoundingClientRect: () => ({}),
+      getContext: () => ({ setTransform() {}, clearRect() {} }), getBoundingClientRect: () => ({}),
     });
     return elements.get(id);
   };
@@ -75,7 +75,7 @@ try {
   };
   vm.createContext(sandbox);
   const source = await readFile(new URL('../helper/renderer/pet.js', import.meta.url), 'utf8');
-  vm.runInContext(`${source}\nglobalThis.testState = state; globalThis.testFrame = currentAnimationFrame; globalThis.testAnimations = ANIMATIONS;`, sandbox);
+  vm.runInContext(`${source}\nglobalThis.testState = state; globalThis.testFrame = currentAnimationFrame; globalThis.testAnimations = ANIMATIONS; globalThis.testTick = frame;`, sandbox);
   const idleStart = now;
   assert.equal(sandbox.testAnimations.idle.durations.reduce((sum, ms) => sum + ms, 0), 6000);
   assert.equal(sandbox.testFrame(idleStart + 4000).col, 0);
@@ -118,10 +118,49 @@ try {
   assert.ok(sandbox.testState.liveUntil > now);
   console.log('✓ 拖动结束恢复最新任务动画，长任务气泡持续显示');
 
+  const bubbleElement = elements.get('bubble');
+  callbacks.Bubble({ title: '', status: '' });
+  callbacks.State('idle');
+  const quietStart = now;
+  // 逐帧跨过多个六秒边界，捕获只显示一帧的待机气泡闪烁。
+  for (let tick = 0; tick <= 1800; tick++) {
+    now = quietStart + tick * (1000 / 60);
+    sandbox.testTick(now);
+    assert.equal(bubbleElement.dataset.visible, '0', `待机 ${tick} 帧不应自动说话`);
+  }
+  callbacks.Config({ bubbles: false });
+  callbacks.Config({ bubbles: true });
+  sandbox.testTick(now);
+  assert.equal(bubbleElement.dataset.visible, '0', '重新开启气泡不触发待机闲聊');
+  console.log('✓ 连续待机 30 秒及重新开启气泡均不自动说话');
+
+  callbacks.Bubble({ title: '真实任务', status: '正在执行' });
+  now += 3_600_000;
+  sandbox.testTick(now);
+  assert.equal(bubbleElement.dataset.visible, '1', '待机动画不能遮掉宿主任务提示');
+  assert.equal(elements.get('bubble-title').textContent, '真实任务');
+  assert.equal(elements.get('bubble-status').textContent, '正在执行');
+  callbacks.Bubble({ title: '', status: '' });
+  sandbox.testTick(now);
+  assert.equal(bubbleElement.dataset.visible, '0', '任务结束后恢复安静待机');
+  console.log('✓ 实时任务气泡保留，任务清空后安静待机');
+
+  for (const animation of ['waving', 'jumping', 'failed']) {
+    callbacks.State(animation);
+    sandbox.testTick(now);
+    assert.equal(bubbleElement.dataset.visible, '1', `${animation} 事件保留提示气泡`);
+    now += 2700;
+    sandbox.testTick(now);
+    assert.equal(bubbleElement.dataset.visible, '0', `${animation} 提示到期后隐藏`);
+    callbacks.State('idle');
+    sandbox.testTick(now);
+    assert.equal(bubbleElement.dataset.visible, '0', `${animation} 回到待机后不再闲聊`);
+  }
+  console.log('✓ 打招呼、完成和失败气泡保留，到期及回到待机后隐藏');
+
   vm.runInContext('globalThis.testBubblePosition = positionBubble; globalThis.testBubbleStep = stepBubbleAxis; globalThis.testBubbleMotion = () => ({ motion: bubbleMotion, target: bubbleFrameCache });', sandbox);
   const metrics = computeMetrics(ENVELOPE_SCALE);
   const layout = { left: 0, top: 0, right: metrics.width, bottom: metrics.height, petBottom: 340, bubbleWidth: BUBBLE_WIDTH };
-  const bubbleElement = elements.get('bubble');
   bubbleElement.dataset.visible = '0';
   callbacks.Layout(layout);
   sandbox.testBubblePosition();

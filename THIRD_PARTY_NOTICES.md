@@ -79,8 +79,8 @@ ChatGPT/Codex Desktop 分发的 `hatch-pet` skill：
   属 OpenAI 专有资产，本项目不打包、不分发。
 - **ChatGPT/Codex Desktop 的应用代码**：闭源专有。本项目仅通过观察其公开行为
   （窗口层级、穿透策略、拖拽联动）来设计自己的实现，未复制任何源码文本。
-- **"Codex" / "ChatGPT" 名称与标识**：商标。本项目不使用；文档中仅在描述格式
-  兼容性时做事实性提及。
+- **"Codex" / "ChatGPT" 名称与标识**：商标。本项目不使用官方图标；文档及预设名称
+  中的引用仅用于说明参考来源，不表示官方关联。
 
 ---
 
@@ -91,3 +91,25 @@ ChatGPT/Codex Desktop 分发的 `hatch-pet` skill：
 本项目**不再分发** Electron 二进制。
 
 Electron 许可：MIT。
+
+## 7. 第二阶段主题预览
+
+- **Material Color Utilities 0.4.0**，Copyright 2021 Google LLC，Apache-2.0。
+  图像量化、主色评分和浅深配色算法打包进 `lib/client.js`，保留上游版权注释；
+  完整许可见 `LICENSES/material-color-utilities.txt`。
+  来源：https://github.com/material-foundation/material-color-utilities 。
+- **Codex 配色参考**：仅使用官方 Appearance 文档公开的强调、背景、正文色值和布局参考，
+  没有复制 Codex Desktop 源码。公开的 `openai/codex` 仓库为 Apache-2.0，主要为 CLI。
+  来源：https://learn.chatgpt.com/docs/reference/settings#appearance 。
+- **开源主题配色**：Ayu、Catppuccin、Dracula、Everforest、GitHub、Gruvbox、Monokai、
+  Night Owl、Nord、One、Rose Pine、Solarized、Tokyo Night、VS Code Plus（MIT），
+  Material Darker（Apache-2.0）。使用 `@shikijs/themes 4.5.0` 公开数据中的背景、正文
+  和强调色，与本机 Codex `26.928.31416` 的对应外观预设核对。Harness 的角色映射和
+  对比度修正为本项目实现，不包含完整编辑器主题、语法高亮表或 Codex 主题引擎。
+  完整上游版权与许可见 `LICENSES/theme-palettes.txt`；版本、具体变体和来源见
+  [主题预设来源](docs/theme-presets.md)。主题各自的许可按原作者声明保留，
+  不将 Shiki 的 MIT 许可笼统套用到所有主题。
+  来源：https://github.com/shikijs/shiki ，https://github.com/shikijs/textmate-grammars-themes 。
+- **esbuild 0.28.2**（MIT）：仅开发构建工具，不包含运行时二进制。
+
+蓝鲸配色和渐变为本项目自行设计。上述预设不是对 Codex 内置全部主题的兼容承诺。
