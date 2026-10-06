@@ -79,9 +79,9 @@ CyberWhale 为 Harness 做了一套**双端视觉本地化**，参考两套系�
 | 仓库地址 | `https://github.com/CyberWei922/dsh-cyberwhale` |
 | Release 压缩包 | [Releases](https://github.com/CyberWei922/dsh-cyberwhale/releases) 中 `.tgz` 的下载直链或本地路径 |
 
-安装完成后点击**立即启用**。如果没有出现新增的设置页，完全退出并重新打开 Harness。
+插件卡片名称为 **Harness 美化与桌宠**。安装完成后点击**立即启用**。如果没有出现新增的设置页，完全退出并重新打开 Harness。
 
-> **1.0 正式版**包含双端视觉本地化、主题、壁纸与字体功能。从旧版升级时，请指定 `dsh-cyberwhale@1.0.0`；升级方法见下方常见问题。
+> **1.0 正式版**包含双端视觉本地化、主题、壁纸与字体功能。当前修正版为 **1.0.1**，同步更新了插件卡片的名称和介绍；从旧版升级时，请指定 `dsh-cyberwhale@1.0.1`，升级方法见下方常见问题。
 
 应用内安装无需额外安装 Node.js。只有命令行安装或开发才需要 Node.js 22+；从仓库安装还需要可用的 `git`。
 

@@ -85,8 +85,8 @@ npm pack                     # 产出 dsh-cyberwhale-<version>.tgz
 ```bash
 # 1) 改版本号（tag 必须和 package.json 的 version 一致，workflow 会校验）
 # 2) 提交后打 tag 并推
-git tag -a v1.0.0 -m "v1.0.0：双端视觉本地化与外观美化正式版"
-git push origin main refs/tags/v1.0.0
+git tag -a v1.0.1 -m "v1.0.1：更新插件名称与介绍"
+git push origin main refs/tags/v1.0.1
 ```
 
 workflow 会依次：安装构建依赖 → 校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 →
@@ -128,10 +128,14 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
-**当前正式版本：v1.0.0**。发布通道为 [npm](https://www.npmjs.com/package/dsh-cyberwhale) 与
-[GitHub Release](https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v1.0.0)，版本内容见 [1.0 正式版说明](release-1.0.0.md)。发布结果以 Actions 和对应下载页面为准。
+**当前正式版本：v1.0.1**。发布通道为 [npm](https://www.npmjs.com/package/dsh-cyberwhale) 与
+[GitHub Release](https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v1.0.1)，版本内容见 [1.0.1 修正版说明](release-1.0.1.md) 和 [1.0 正式版说明](release-1.0.0.md)。发布结果以 Actions 和对应下载页面为准。
 
 **发布是全自动的：推一个 `v*` tag 就够了。** 详见下面的「发布」。
+
+### v1.0.1 改了什么
+
+Harness 插件卡片名称更新为「Harness 美化与桌宠」，中英文介绍覆盖 macOS 与 Windows 风格界面、主题、壁纸、字体和可选蓝鲸桌宠；npm 描述同步更新。修复 1.0.0 中插件卡片仍显示早期桌宠名称与介绍的问题。发布流程按当前版本读取对应的发布说明。
 
 ### v1.0.0 改了什么
 
@@ -237,8 +241,8 @@ npm test
 git add package.json package-lock.json README.md docs/distribution.md && git commit -m "chore: 发布新版本"
 
 # 4. 打 tag 并推 —— 这一步就是发布
-git tag -a v1.0.0 -m "v1.0.0：双端视觉本地化与外观美化正式版"
-git push origin main refs/tags/v1.0.0
+git tag -a v1.0.1 -m "v1.0.1：更新插件名称与介绍"
+git push origin main refs/tags/v1.0.1
 ```
 
 推完用 `gh run watch` 看进度，约 30 秒。

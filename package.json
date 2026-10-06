@@ -1,7 +1,7 @@
 {
   "name": "dsh-cyberwhale",
-  "version": "1.0.0",
-  "description": "DeepSeek Harness 的 macOS 与 Windows 双端视觉本地化、主题美化和可选蓝鲸桌宠插件",
+  "version": "1.0.1",
+  "description": "为 DeepSeek Harness 提供 macOS 与 Windows 风格界面、主题配色、壁纸和字体设置，以及可独立开关的蓝鲸桌宠。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
