@@ -2,6 +2,7 @@
 const React = require('react');
 const { Button } = require('@deepseek-ai/dsh-client-ui-primitives');
 const { normalizeAppearance } = require('../lib/appearance-model.cjs');
+const { PlatformSelect } = require('./platform-choice.js');
 const h = React.createElement;
 
 // Keep family names, not one duplicate entry for every weight/style. Quoting
@@ -61,14 +62,14 @@ function FontSettings({ config, edit, disabled }) {
   return h('div', { className: 'dsh-appearance-fonts' },
     ...[['uiFont', '界面字体'], ['codeFont', '代码字体']].map(([key, title]) => {
       const current = config[key], match = options.find(font => font.value === current || font.name === current);
+      const entries = [{ value: '', label: '系统默认' }];
+      if (current && !match) entries.push({ value: current, label: `${fontLabel(current)}（当前）` });
+      for (const font of options) entries.push({ value: font.value, label: font.name });
       return h('div', { key, className: 'dsh-appearance-row' },
         h('div', { className: 'dsh-appearance-label' }, title),
         h('div', { className: 'dsh-appearance-control dsh-appearance-font-control' },
-          h('select', { className: 'dsh-appearance-input', 'aria-label': title, 'aria-busy': busy, value: match?.value ?? current, disabled,
-            onChange: e => edit({ [key]: e.target.value }) },
-          h('option', { value: '' }, '系统默认'),
-          current && !match && h('option', { value: current }, `${fontLabel(current)}（当前）`),
-          ...options.map(font => h('option', { key: font.value, value: font.value }, font.name))),
+          h(PlatformSelect, { className: 'dsh-appearance-input', label: title, busy, value: match?.value ?? current, disabled,
+            options: entries, onChange: value => edit({ [key]: value }) }),
           error && h('input', { className: 'dsh-appearance-input', 'aria-label': `手动输入${title}`, placeholder: '输入已安装字体名称', value: current, disabled,
             onChange: e => edit({ [key]: e.target.value }) })));
     }),

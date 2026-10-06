@@ -4,6 +4,7 @@ const { Button, DisclosureRow, IconChevronDownOutlineRegular, Switch, SegmentedC
 const { PRESETS, GRADIENTS, normalizeAppearance, palette, contrast } = require('../lib/appearance-model.cjs');
 const { readImage, colorFromImage } = require('./appearance-image.mjs');
 const { FontSettings } = require('./appearance-fonts.js');
+const { PlatformSelect } = require('./platform-choice.js');
 const h = React.createElement;
 function useAppearance(controller) {
   const [snapshot, setSnapshot] = React.useState(() => controller.getState());
@@ -28,14 +29,14 @@ function ThemeCard({ scheme, config, edit, disabled }) {
     h('div', { className: 'dsh-appearance-mini', style: { background: p.bg, color: p.fg, '--mini-accent': p.accent, '--mini-line': p.border, '--mini-muted': p.muted } },
       h('div', { className: 'dsh-appearance-mini-sidebar', style: { background: p.layer } }, h('span'), h('i'), h('i'), h('i')),
       h('div', { className: 'dsh-appearance-mini-chat' }, h('strong', null, '让灵感自然发生'), h('p', null, '背景、文字与强调色，协调搭配。'), h('code', null, 'const hello = "Harness";'), h('div', { className: 'dsh-appearance-mini-composer', style: { background: p.card } }, h('span', null, '有什么想法？'), h('b', { style: { background: p.accentFill, color: p.onAccent } }, '↑')))),
-    h('label', { className: 'dsh-appearance-select-label' }, '主题预设', h('select', { value: input.preset, disabled, 'aria-label': `${name}主题预设`, onChange: e => choose(e.target.value) }, ...PRESETS[scheme].map(p => h('option', { key: p.id, value: p.id }, p.name)), input.preset === 'custom' && h('option', { value: 'custom' }, '自定义'))),
+    h('label', { className: 'dsh-appearance-select-label' }, '主题预设', h(PlatformSelect, { value: input.preset, disabled, label: `${name}主题预设`, onChange: choose, options: [...PRESETS[scheme].map(p => ({ value: p.id, label: p.name })), ...(input.preset === 'custom' ? [{ value: 'custom', label: '自定义' }] : [])] })),
     h('div', { className: 'dsh-appearance-colors' }, ...[['accent', '强调色'], ['background', '背景色'], ['foreground', '文字色']].map(([key, label]) => h(ColorField, { key, title: `${name}${label}`, value: input[key], disabled, onChange: value => edit({ [scheme]: { ...input, preset: 'custom', [key]: value } }) }))),
     contrast(input.foreground, input.background) < 4.5 && h('p', { className: 'dsh-appearance-description' }, '文字与背景接近，已自动提高显示对比度。'));
 }
 function BackgroundSettings({ config, theme, disabled, uploading, fileError, sources, sourceImage, fileInput, upload, extract, edit, remove, changeBackground }) {
   const [effectsOpen, setEffectsOpen] = React.useState(false), [colorsOpen, setColorsOpen] = React.useState(false);
   const row = (key, title, description, control) => h(Row, { key, title, description }, control);
-  const select = (label, value, options, onChange) => h('select', { className: 'dsh-appearance-input', 'aria-label': label, value, disabled, onChange: e => onChange(e.target.value) }, ...options.map(([value, text]) => h('option', { key: value, value }, text)));
+  const select = (label, value, options, onChange) => h(PlatformSelect, { className: 'dsh-appearance-input', label, value, disabled, onChange, options: options.map(([optionValue, text]) => ({ value: optionValue, label: text })) });
   const range = (key, title, description, min, max, unit) => row(key, title, description, h('label', { className: 'dsh-appearance-range' }, h('input', { type: 'range', min, max, value: config[key], disabled, 'aria-label': title, onChange: e => edit({ [key]: Number(e.target.value) }) }), h('span', null, `${config[key]}${unit}`)));
   const mask = () => range('mask', '背景遮罩', '越高越清晰，越低越能看到背景。', 55, 95, '%');
   const disclosure = (key, title, open, onToggle, children) => h(DisclosureRow, {

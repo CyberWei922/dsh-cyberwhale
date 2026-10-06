@@ -25,6 +25,7 @@
 // 由工厂注入的 require —— 解析来自页面的模块表，不打包任何 Harness Client 包。
 const React = require('react');
 const { Button, DisclosureRow, Modal, SegmentedControl, StateDot, Switch } = require('@deepseek-ai/dsh-client-ui-primitives');
+const { PlatformScaleChoice } = require('./platform-choice.js');
 const { createAppearanceController } = require('./appearance-runtime.js');
 const { AppearancePage } = require('./appearance-page.js');
 const { CSS: APPEARANCE_CSS } = require('./appearance-css.js');
@@ -507,7 +508,7 @@ function WhalePetSection(props) {
       'scale',
       '显示大小',
       '影响桌面鲸鱼的显示比例。',
-      h(SegmentedControl, {
+      h(PlatformScaleChoice, {
         id: 'dsh-whale-scale',
         label: '显示大小',
         value: scaleToPreset(scale),

@@ -73,7 +73,7 @@ body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-
 
 以微软官方 WinUI 3 Gallery 的 NavigationView、ToggleSwitch、Button、ComboBox、TextBox 等控件为参照。Gallery 提供实际交互示例，可用于比对浅深主题和各状态。[微软 NavigationView 文档](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/navigationview)
 
-1. **导航和层次**：保留左导航、右内容的结构。建议用柔和的中性色背景标示选中项，并以主题强调色绘制短竖条；悬停与按下分别有轻微变化。内容使用清晰的页面标题、分组标题和设置卡片，避免文字或控件与导航混为一体。这是本项目建议的视觉方向，具体间距以 Gallery 和页面内容调整。
+1. **导航和层次**：保留左导航、右内容的结构。建议用柔和的中性色背景标示选中项，并以主题强调色绘制短竖条；悬停与按下分别有轻微变化。内容使用清晰的页面标题和分组；设置行保持平铺列表（细分隔线），悬停只加极淡的中性底色，不做卡片白底或浮起效果，避免文字或控件与导航混为一体。这是本项目建议的视觉方向，具体间距以 Gallery 和页面内容调整。
 2. **字体**：系统默认模式参考 Segoe UI Variable，回退 Segoe UI 与中文系统字体；用户已选择的自定义字体继续生效。正文可参考 14/20、说明 12/16、分区标题 20/28 的字号和行高，标题使用 600 字重。采用 CSS 逻辑像素，不手动乘 Windows 缩放比例。[微软字体规范](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography)
 3. **圆角和边界**：普通按钮、输入框和导航背景参考 4px 圆角，设置弹窗参考 8px；保留相接区域的直边。卡片圆角与间距可按视觉层级调整。边界细而清晰，阴影克制。[微软几何规范](https://learn.microsoft.com/en-us/windows/apps/design/style/rounded-corner)
 4. **开关**：参考 WinUI ToggleSwitch 的圆形滑块、关闭态边框和开启态强调色；维持现有修改后立即生效的行为。保留可访问名称、`aria-checked`、禁用态和键盘操作，状态不能只靠颜色区分。具体尺寸和滑块行程以 Gallery 比对，扩大点击范围时避免覆盖相邻控件。[微软开关规范](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/toggles)
@@ -96,8 +96,8 @@ npm run verify:mac-settings-render
 
 渲染检查需要可用的 Playwright 模块和 Harness 安装包，可通过 `DSH_TEST_BROWSER_MODULE`、`DSH_TEST_ASAR` 指定路径。官方锚点检查可使用 `DSH_APP_ASAR`；没有安装包时会跳过该项。刷新或重启 Harness 后加载新的 `lib/client.js`，不要直接手改构建产物。
 
-平台测试已改为真正的 Windows 样式验收：`tools/test-settings-platform.mjs` 覆盖作用域门、语义锚点、无哈希类名、开关几何、材质回退与平台路由；`tools/verify-mac-settings-render.mjs` 的 Windows 段覆盖通用／主题／桌宠三页 × 浅深色截图、WinUI 开关几何与行程、键盘焦点与扩展命中区、关闭美化恢复官方、减少透明实色回退和卸载清理。平台互不影响、未知系统回退的检查保持不变，macOS 的视觉与行为检查继续通过。
+平台测试已改为真正的 Windows 样式验收：`tools/test-settings-platform.mjs` 覆盖作用域门、语义锚点、无哈希类名、开关几何、平铺行、圆形单选、宿主下拉框原生回退、材质回退与平台路由；`tools/verify-mac-settings-render.mjs` 的 Windows 段覆盖通用／主题／桌宠三页 × 浅深色截图、WinUI 开关几何与行程、键盘焦点与扩展命中区、关闭美化恢复官方、减少透明实色回退和卸载清理。平台互不影响、未知系统回退的检查保持不变，macOS 的视觉与行为检查继续通过。
 
 交付时提供 Windows 实机浅色、深色截图，至少覆盖通用、主题、桌宠三个分区，以及开关关闭／开启／禁用和键盘焦点。检查 100%、125%、150%、200% 系统缩放与窄窗口，确认无裁切或横向溢出。验证修改会保存、重开仍保留、关闭美化恢复官方样式、macOS 外观不受影响。浏览器模拟 `win32` 可以验证路由和 CSS，Windows 字体、系统缩放和真实桌面材质仍以实机验收为准。
 
-本次实测记录：Windows 11 @100%，实机浅色／深色 × 通用设置／桌宠／主题三页截图、开关关／开／禁用与 Tab 焦点环、640px 窄窗口无横向溢出、关闭美化恢复官方（开关 36px、面板 28px、门控移除）、减少透明切到实色底，均已验证。125%／150%／200% 缩放与 `forced-colors` 实机项受测试机（仅一块 100% 显示器）限制未实测，样式侧已提供对应媒体查询。
+本次实测记录：Windows 11 @100%，实机浅色／深色 × 通用设置／桌宠／主题三页截图、开关关／开／禁用与 Tab 焦点环、640px 窄窗口无横向溢出、关闭美化恢复官方（开关 36px、面板 28px、门控移除）、减少透明切到实色底，均已验证。按真机反馈复刻 WinUI 参考：设置行改为平铺列表（细分隔线、悬停极淡底色、无白色凸起）；字体／预设等宿主 `select` 在 Windows 面板回退平台外观并跟随 `color-scheme`；外观模式／显示大小等互斥选择保留官方分段控件，只换取 WinUI 圆形单选外观（20px 圆环 + 选中强调色圆点）。125%／150%／200% 缩放与 `forced-colors` 实机项受测试机（仅一块 100% 显示器）限制未实测，样式侧已提供对应媒体查询。

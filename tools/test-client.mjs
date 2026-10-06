@@ -843,6 +843,9 @@ console.log('\n[4g] 背景设置：模式切换、空图片与按需展开');
     return flattenNodes(background.render());
   };
   const segment = nodes => nodes.find(n => n.type === primitivesMock.SegmentedControl);
+  // Windows 下拉面板按平台分发；测试环境没有 Windows 标记，PlatformSelect 会
+  // 回落到 <select>，但在摊平的树里先看到的是 PlatformSelect 节点本身。
+  const pickerNode = n => n.type === 'select' || n.type?.name?.startsWith('PlatformSelect');
   const button = (nodes, text) => nodes.find(n => n.type === primitivesMock.Button && n.children?.[0] === text);
   const disclosure = (nodes, title) => nodes.find(n => n.type === primitivesMock.DisclosureRow && n.props.title === title);
   const ranges = nodes => nodes.filter(n => n.type === 'input' && n.props.type === 'range');
@@ -853,11 +856,11 @@ console.log('\n[4g] 背景设置：模式切换、空图片与按需展开');
   segment(nodes).props.onChange('image'); nodes = view();
   check('无图片时选中图片模式不会跳回纯色', config.background, 'image');
   check('空图片模式显示选择图片入口', button(nodes, '选择图片') !== undefined, true);
-  check('空图片模式不显示预览、布局或效果', nodes.some(n => n.type === 'img' || n.type === 'select' || n.type === primitivesMock.DisclosureRow), false);
+  check('空图片模式不显示预览、布局或效果', nodes.some(n => n.type === 'img' || pickerNode(n) || n.type === primitivesMock.DisclosureRow), false);
 
   controller.edit({ wallpaper: image }); nodes = view();
   const themeBefore = JSON.stringify([config.light, config.dark]);
-  check('有图片时显示预览和布局', nodes.some(n => n.type === 'img') && nodes.filter(n => n.type === 'select').length === 2, true);
+  check('有图片时显示预览和布局', nodes.some(n => n.type === 'img') && nodes.filter(pickerNode).length === 2, true);
   check('效果调整和图片取色默认折叠', [disclosure(nodes, '效果调整').props.open, disclosure(nodes, '从图片生成配色').props.open], [false, false]);
   check('折叠时不渲染滑块和候选主色', ranges(nodes).length === 0 && !nodes.some(n => n.props.className === 'dsh-appearance-swatches'), true);
   disclosure(nodes, '效果调整').props.onToggle(); nodes = view();
@@ -897,8 +900,11 @@ console.log('\n[4h] 系统字体：自动读取、即时应用与失败回退');
   const view = () => flattenNodes(fonts.render());
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
   const reopen = () => { fonts.dispose(); fonts = createHookRuntime(node.type, props); return view(); };
-  const picker = (nodes, name) => nodes.find(n => n.type === 'select' && n.props['aria-label'] === name);
-  const names = select => flattenNodes(select.children).filter(n => n.type === 'option').map(n => n.children[0]);
+  const picker = (nodes, name) => nodes.find(n => (n.type === 'select' && n.props['aria-label'] === name)
+    || (n.type?.name?.startsWith('PlatformSelect') && n.props.label === name));
+  const names = select => select.type === 'select'
+    ? flattenNodes(select.children).filter(n => n.type === 'option').map(n => n.children[0])
+    : (select.props.options ?? []).map(option => option.label);
   const read = nodes => nodes.find(n => n.type === primitivesMock.Button).props.onClick();
   let resolveRead;
   sandbox.queryLocalFonts = () => { reads++; return new Promise(resolve => { resolveRead = resolve; }); };
@@ -911,12 +917,12 @@ console.log('\n[4h] 系统字体：自动读取、即时应用与失败回退');
   resolveRead([{ family: 'PingFang SC', style: 'Regular' }, { family: 'PingFang SC', style: 'Bold' }, { family: 'Consolas' }, { family: 'Noto Sans CJK SC' }, { family: 'Example, Serif (UI)' }, { family: '宋体' }, { family: '' }]);
   await settle(); nodes = view();
   check('按家族去重，中文与带标点的字体均可选择', names(picker(nodes, '代码字体')).length, 6);
-  picker(nodes, '界面字体').props.onChange({ target: { value: '"Example, Serif (UI)"' } });
+  picker(nodes, '界面字体').props.onChange('"Example, Serif (UI)"');
   check('选择后立即保存为单个字体名', config.uiFont, '"Example, Serif (UI)"');
   nodes = view();
-  picker(nodes, '代码字体').props.onChange({ target: { value: '"Consolas"' } });
+  picker(nodes, '代码字体').props.onChange('"Consolas"');
   check('界面与代码字体分别保存', [config.uiFont, config.codeFont], ['"Example, Serif (UI)"', '"Consolas"']);
-  picker(view(), '界面字体').props.onChange({ target: { value: '' } });
+  picker(view(), '界面字体').props.onChange('');
   check('选择系统默认清除覆盖', config.uiFont, '');
   props.disabled = true; view(); props.disabled = false; view();
   check('页面内临时禁用后恢复，不重复请求字体', reads, 1);

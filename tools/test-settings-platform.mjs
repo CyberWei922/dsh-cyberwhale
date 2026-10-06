@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import platform from '../client/settings-platform.js';
 import windows from '../client/settings-windows-css.js';
 
@@ -93,4 +94,26 @@ win('选中导航项用柔和中性底色 + 强调色短竖条',
 win('页面标题用 WinUI 标题字号阶梯', /\[data-whale-settings-title\]::before\s*\{[^}]*font-size:20px[^}]*font-weight:600/.test(css));
 win('面板圆角 8px、控件圆角 4px', /\{[^}]*border-radius:8px/.test(css) && /border-radius:4px/.test(css));
 win('主题相关变量统一 --whale-win-* 前缀', css.includes('--whale-win-mica') && !/--whale-(?!win-)[a-z]/.test(css));
+// 平铺行：透明底、无边框、细分割线；悬停只加极淡中性底色（无白色凸起）。
+win('设置行平铺（无卡片白底/边框，细分割线分隔）',
+  /:is\(\.dsh-appearance-row,\s*\.dsh-whale-row\)[^{]*\{[^}]*background-color:transparent[^}]*\}/.test(css) &&
+  /background-size:100% 1px/.test(css) && !css.includes('--whale-win-card') && !/var\(--dsw-alias-bg-layer-1\)/.test(css));
+win('行悬停为极淡中性底色', /:hover\s*\{[^}]*color-mix\(in srgb,var\(--dsw-alias-label-primary\) 4%/.test(css));
+// WinUI 下拉面板：4px 字段 + 8px 圆角弹层 + 选中项 3×16 强调色短竖条（无白色凸起）。
+win('WinUI 下拉面板样式（字段/弹层/选中强调条）',
+  /\.dsh-win-combo-trigger\s*\{[^}]*border-radius:4px[^}]*\}/.test(css) &&
+  /\.dsh-win-combo-popup\s*\{[^}]*border-radius:8px[^}]*\}/.test(css) &&
+  /\.dsh-win-combo-option\[aria-selected="true"\]::before\s*\{[^}]*width:3px[^}]*height:16px[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
+const combo = await readFile(new URL('../client/win-combobox.js', import.meta.url), 'utf8');
+win('下拉面板保留 combobox/listbox ARIA 与键盘操作',
+  combo.includes("role: 'combobox'") && combo.includes("role: 'listbox'") && combo.includes("role: 'option'") &&
+  combo.includes("event.key === 'ArrowDown'") && combo.includes("event.key === 'Escape'") && combo.includes("event.key === 'Tab'"));
+const choice = await readFile(new URL('../client/platform-choice.js', import.meta.url), 'utf8');
+win('平台分发：Windows 用 WinUI 下拉面板，其他平台保留原控件',
+  choice.includes('data-whale-settings-platform') && choice.includes('WinComboBox') && choice.includes('SegmentedControl') && choice.includes("h('select'"));
+// 分段选择改成 WinUI 圆形单选：藏掉官方白色药丸指示器，用 20px 圆环 + 选中强调色圆点。
+win('选择控件是 WinUI 圆形单选（无白色凸起药丸）',
+  /\[role="tablist"\]\s*>\s*span\s*\{[^}]*display:none/.test(css) &&
+  /\[role="tab"\]::before\s*\{[^}]*width:20px[^}]*height:20px[^}]*border-radius:50%/.test(css) &&
+  /\[aria-selected="true"\]::before\s*\{[^}]*radial-gradient\(circle at center,var\(--dsw-alias-brand-primary\)/.test(css));
 console.log('Settings platform: client OS routing, unknown fallback, reduced transparency, transitions, cleanup and the WinUI 3 style contract passed.');
