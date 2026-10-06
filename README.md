@@ -48,6 +48,14 @@
   </tr>
 </table>
 
+### 主题轮播预览
+
+看看不同主题切换时的实际效果，找到适合自己工作环境的配色。
+
+<p align="center">
+  <a href="docs/images/theme-carousel.gif"><img src="docs/images/theme-carousel.gif" alt="Harness 主题轮播动图：不同主题的配色与界面效果预览" width="100%"></a>
+</p>
+
 喜欢这种外观？[几步安装并启用](#快速上手)，再搭配自己的主题、壁纸和字体。
 
 ## 为什么需要 CyberWhale？
@@ -70,7 +78,7 @@ CyberWhale 为 Harness 做了一套**双端视觉本地化**，参考两套系�
 | --- | --- |
 | <img src="docs/images/logo-apple.svg" alt="Apple" width="16" height="18"> **macOS 风格设置界面** | 圆角分组、细分隔线、小型开关、磨砂侧栏，以及随当前分区变化的标题 |
 | <img src="docs/images/logo-windows.svg" alt="Windows" width="16" height="16"> **Windows WinUI 3 风格设置界面** | 带强调色指示条的导航、设置卡片、小圆角控件与 Mica 风格的底色层次 |
-| 🎨 **27 个浅深色主题选项** | 浅色 10 个、深色 17 个，包含 Catppuccin、Nord、Dracula、Tokyo Night 等配色与蓝鲸原创主题 |
+| 🎨 **27 个浅深色主题选项** | 浅色 10 个、深色 17 个，包含 Catppuccin、Nord、Dracula、Tokyo Night 等配色与蓝鲸原创主题；[查看主题轮播](#主题轮播预览) |
 | 🖌️ **自定义配色** | 分别调整浅色和深色模式的强调色、背景色、文字色，自动派生界面表面和边界颜色 |
 | 🖼️ **纯色、渐变与图片背景** | 三套渐变或自己的 PNG、JPEG、WebP 图片；可调整图片布局、背景遮罩和图片模糊 |
 | 🌈 **从壁纸生成配色** | 提取图片中的候选主色，选择后生成配套的浅色与深色方案 |
