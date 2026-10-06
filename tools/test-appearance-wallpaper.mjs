@@ -1,6 +1,7 @@
 // Headless fixture check: never opens, inspects or changes the user's desktop.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import model from '../lib/appearance-model.cjs';
 import appearanceCSS from '../client/appearance-css.js';
@@ -10,7 +11,7 @@ const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require(process.env.DSH_TEST_BROWSER_MODULE || 'playwright')); }
 catch { throw new Error('此专项检查需要 Playwright；可用 DSH_TEST_BROWSER_MODULE 指定已安装模块的位置。'); }
-const bundle = await build({ entryPoints: [new URL('../client/appearance-runtime.js', import.meta.url).pathname],
+const bundle = await build({ entryPoints: [fileURLToPath(new URL('../client/appearance-runtime.js', import.meta.url))],
   bundle: true, write: false, format: 'iife', globalName: 'WhaleRuntime', platform: 'browser' });
 const rgba = Buffer.alloc(256 * 128 * 4);
 for (let y = 0; y < 128; y++) for (let x = 0; x < 256; x++) rgba.set([x, y * 2, x % 32 < 16 ? 30 : 230, 255], (y * 256 + x) * 4);

@@ -9,14 +9,14 @@
 | 客户端标记 | 启用外观美化时的入口 | 当前效果 |
 | --- | --- | --- |
 | `darwin` | `body[data-whale-settings-platform="macos"]`，同时保留 `data-whale-mac-settings` | 已完成的 macOS 界面 |
-| `win32` | `body[data-whale-settings-platform="windows"]` | Windows 样式文件为空，保留 Harness 官方设置布局和控件 |
+| `win32` | `body[data-whale-settings-platform="windows"]` | WinUI 3 风格设置界面（NavigationView 导航、设置卡片、ToggleSwitch、Mica 近似材质） |
 | 未提供或其他值 | 不添加平台样式属性 | Harness 官方设置界面 |
 
-关闭「启用外观美化」或卸载插件会移除平台样式属性；系统标记延迟出现或变化时会重新选择入口。Windows 当前仍使用已有的共享配色、字体和背景功能；“官方界面”指没有额外的 Windows 设置布局和控件外形覆盖。
+关闭「启用外观美化」或卸载插件会移除平台样式属性；系统标记延迟出现或变化时会重新选择入口。Windows 与 macOS 使用同一套共享配色、字体和背景功能，各自在平台样式表中渲染；“官方界面”指没有额外的平台设置布局和控件外形覆盖。
 
 | 文件 | 职责 |
 | --- | --- |
-| `client/settings-windows-css.js` | Windows CSS 扩展入口，目前导出空字符串；主要开发位置 |
+| `client/settings-windows-css.js` | Windows WinUI 3 样式（`--whale-win-*` 变量、导航/卡片/开关/材质与降级） |
 | `client/settings-macos-css.js` | 已确认的 macOS 样式 |
 | `client/settings-css.js` | 汇总两套 CSS，由客户端统一注入 |
 | `client/settings-platform.js` | 客户端系统识别、样式属性和清理 |
@@ -67,7 +67,7 @@ body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-
 | 插件设置行 | `.dsh-appearance-row`、`.dsh-whale-row` |
 | 主题卡片 | `.dsh-appearance-card` |
 
-优先使用语义属性和插件自己的类名。Harness 生成的 CSS Module 类名会随构建变化，不应写入样式；不要移动或替换官方 React 节点。当前右侧标题复制仅用于 macOS，Windows 若需要添加当前分区标题，应单独实现 Windows 标题处理，并在关闭美化和卸载时恢复。
+优先使用语义属性和插件自己的类名。Harness 生成的 CSS Module 类名会随构建变化，不应写入样式；不要移动或替换官方 React 节点。右侧标题属性（`data-whale-settings-title`）在 macOS 与 Windows 下都会写入，由各平台自己的样式表渲染，关闭美化和卸载时自动恢复。
 
 ## WinUI 3 视觉要求
 
@@ -96,6 +96,8 @@ npm run verify:mac-settings-render
 
 渲染检查需要可用的 Playwright 模块和 Harness 安装包，可通过 `DSH_TEST_BROWSER_MODULE`、`DSH_TEST_ASAR` 指定路径。官方锚点检查可使用 `DSH_APP_ASAR`；没有安装包时会跳过该项。刷新或重启 Harness 后加载新的 `lib/client.js`，不要直接手改构建产物。
 
-当前平台测试包含“Windows CSS 为空”和“Windows 渲染与官方样式一致”的占位断言。正式加入 WinUI 样式后，请将这两类断言改成 Windows 样式验收；继续保留平台互不影响、禁用和卸载清理、未知系统回退的检查。相关文件是 `tools/test-settings-platform.mjs` 和 `tools/verify-mac-settings-render.mjs`。macOS 的视觉与行为检查应继续通过。
+平台测试已改为真正的 Windows 样式验收：`tools/test-settings-platform.mjs` 覆盖作用域门、语义锚点、无哈希类名、开关几何、材质回退与平台路由；`tools/verify-mac-settings-render.mjs` 的 Windows 段覆盖通用／主题／桌宠三页 × 浅深色截图、WinUI 开关几何与行程、键盘焦点与扩展命中区、关闭美化恢复官方、减少透明实色回退和卸载清理。平台互不影响、未知系统回退的检查保持不变，macOS 的视觉与行为检查继续通过。
 
 交付时提供 Windows 实机浅色、深色截图，至少覆盖通用、主题、桌宠三个分区，以及开关关闭／开启／禁用和键盘焦点。检查 100%、125%、150%、200% 系统缩放与窄窗口，确认无裁切或横向溢出。验证修改会保存、重开仍保留、关闭美化恢复官方样式、macOS 外观不受影响。浏览器模拟 `win32` 可以验证路由和 CSS，Windows 字体、系统缩放和真实桌面材质仍以实机验收为准。
+
+本次实测记录：Windows 11 @100%，实机浅色／深色 × 通用设置／桌宠／主题三页截图、开关关／开／禁用与 Tab 焦点环、640px 窄窗口无横向溢出、关闭美化恢复官方（开关 36px、面板 28px、门控移除）、减少透明切到实色底，均已验证。125%／150%／200% 缩放与 `forced-colors` 实机项受测试机（仅一块 100% 显示器）限制未实测，样式侧已提供对应媒体查询。

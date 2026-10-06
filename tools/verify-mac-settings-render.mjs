@@ -72,13 +72,17 @@ try {
       window.whale=WhaleRuntime.createAppearanceController({theme:{getTheme:()=>({active:{colorScheme:scheme}}),overrideTokens:(_id,t)=>{apply(t);return()=>{};}},on(){},effect(){}},async(method,payload)=>{if(method==='updateAppearance')config=payload.config;return {config,revision:String(++revision),persisted:true};});
     },{scheme,tokens:model.tokensFor(model.normalizeAppearance()),initialConfig:model.normalizeAppearance()});
     await page.waitForFunction(()=>!whale.getState().loading);
-    if(platform!=='darwin')return;
-    await page.waitForSelector('body[data-whale-mac-settings]');
-    await page.waitForFunction(()=>document.querySelector('[data-whale-settings-title]'));
-    await page.waitForFunction(()=>[...document.querySelectorAll('[data-shortcut-modal] [role="switch"]')].every(el=>{
-      const transform=getComputedStyle(el.firstElementChild).transform;
-      return new DOMMatrix(transform==='none'?undefined:transform).m41===(el.getAttribute('aria-checked')==='true'?12:0);
-    }));
+    if(platform==='darwin'){
+      await page.waitForSelector('body[data-whale-mac-settings]');
+      await page.waitForFunction(()=>document.querySelector('[data-whale-settings-title]'));
+      await page.waitForFunction(()=>[...document.querySelectorAll('[data-shortcut-modal] [role="switch"]')].every(el=>{
+        const transform=getComputedStyle(el.firstElementChild).transform;
+        return new DOMMatrix(transform==='none'?undefined:transform).m41===(el.getAttribute('aria-checked')==='true'?12:0);
+      }));
+    } else if(platform==='win32'){
+      await page.waitForSelector('body[data-whale-settings-platform="windows"]');
+      await page.waitForFunction(()=>document.querySelector('[data-whale-settings-title]'));
+    }
   }
   for(const scheme of ['light','dark'])for(const title of Object.keys(pages)) {
     await mount(title,scheme);
@@ -187,36 +191,83 @@ try {
   assert.equal(await page.locator('[data-whale-settings-title]').count(),0,'unload restores headings');
   assert.equal(await page.locator('body[data-whale-mac-settings-reduced]').count(),0);
   assert.equal(await page.evaluate(()=>document.body.style.getPropertyValue('--whale-mac-selection-fill')),'','unload removes the selection fill');
-  // The empty Windows extension must produce exactly the host settings styles,
-  // even while shared appearance tokens are enabled. Compare computed styles to
-  // the same official fixture with platform appearance disabled.
-  const hostStyles=()=>page.evaluate(()=>{
-    const selectors=['[data-shortcut-modal="settings"]','[data-shortcut-modal] > nav','[data-shortcut-modal] nav button[aria-current="true"]','[data-shortcut-modal] > nav + div','[data-shortcut-modal] > nav + div > div:first-child','[data-shortcut-modal] [role="switch"]','[data-shortcut-modal] [role="switch"] > span'];
-    const properties=['width','height','padding','borderRadius','backgroundColor','color','fontSize','fontWeight','backdropFilter','boxShadow'];
-    return selectors.map(selector=>{const style=getComputedStyle(document.querySelector(selector));return Object.fromEntries(properties.map(key=>[key,style[key]]));});
+  // ── Windows：WinUI 3 扩展验收（替代「空入口保持官方样式」占位断言）──
+  // 面板结构不变，但导航、标题、卡片与开关换成 WinUI 规格；关闭美化/卸载
+  // 必须恢复官方样式，macOS 门控不得出现。
+  const windowsMetrics=()=>page.evaluate(()=>{
+    const panel=document.querySelector('[data-shortcut-modal="settings"]');
+    const toRGB=token=>{const probe=document.createElement('div');probe.style.color=getComputedStyle(document.body).getPropertyValue(token).trim();document.body.append(probe);const value=getComputedStyle(probe).color;probe.remove();return value;};
+    const nav=panel.querySelector(':scope > nav');
+    const selected=nav.querySelector('button[aria-current="true"]');
+    const bar=getComputedStyle(selected,'::before');
+    const title=getComputedStyle(panel.querySelector('[data-whale-settings-title]'),'::before');
+    return {
+      panelRadius:getComputedStyle(panel).borderRadius,
+      brand:toRGB('--dsw-alias-brand-primary'),
+      selectedWeight:getComputedStyle(selected).fontWeight,
+      selectedFill:getComputedStyle(selected).backgroundColor,
+      bar:{width:bar.width,height:bar.height,background:bar.backgroundColor},
+      title:{size:title.fontSize,weight:title.fontWeight},
+      switches:[...panel.querySelectorAll('[role="switch"]')].map(el=>{const b=el.getBoundingClientRect(),r=el.firstElementChild.getBoundingClientRect();return {checked:el.getAttribute('aria-checked'),track:[b.width,b.height],thumb:[r.width,r.height],inset:r.x-b.x};}),
+    };
   });
-  for(const scheme of ['light','dark']) {
-    await mount('通用',scheme,'win32');
+  const windowsSlug=title=>title==='主题'?'theme':title==='桌宠'?'pet':'general';
+  for(const scheme of ['light','dark']) for(const title of ['通用','主题','桌宠']) {
+    await mount(title,scheme,'win32');
     assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),'windows');
-    assert.equal(await page.locator('body[data-whale-mac-settings],body[data-whale-mac-settings-reduced],[data-whale-settings-title]').count(),0);
+    assert.equal(await page.locator('body[data-whale-mac-settings],body[data-whale-mac-settings-reduced]').count(),0,'Windows never takes macOS gates');
     assert.equal(await page.evaluate(()=>document.body.style.getPropertyValue('--whale-mac-selection-fill')),'');
-    const windowsStyles=await hostStyles();
-    assert.equal(windowsStyles[5].height,'20px','Windows keeps the official switch height');
-    assert.equal(windowsStyles[6].width,windowsStyles[6].height,'Windows keeps the official round thumb');
-    await page.locator('[data-shortcut-modal]').screenshot({path:`${output}windows-general-${scheme}.png`});
-    await page.evaluate(()=>whale.edit({enabled:false}));
-    await page.waitForFunction(()=>!whale.getState().busy);
-    assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),null);
-    assert.deepEqual(await hostStyles(),windowsStyles,'empty Windows CSS preserves all measured official settings styles');
-    await page.evaluate(()=>whale.edit({enabled:true,reduceTransparency:true}));
-    await page.waitForSelector('body[data-whale-settings-platform="windows"]');
-    assert.equal(await page.locator('body[data-whale-settings-reduced]').count(),1,'the Windows extension receives the shared transparency preference');
-    assert.equal(await page.locator('body[data-whale-mac-settings-reduced]').count(),0);
-    await page.evaluate(()=>whale.dispose());
-    assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),null,'unload removes the Windows gate');
-    assert.equal(await page.locator('body[data-whale-settings-reduced]').count(),0,'unload removes the shared material preference');
-    console.log(`Windows/${scheme}: official settings appearance, no macOS leakage, disabling and unload verified`);
+    assert.equal(await page.locator('[data-whale-settings-title]').getAttribute('data-whale-settings-title'),title,'the Windows heading copies the active section');
+    const metrics=await windowsMetrics();
+    assert.equal(metrics.panelRadius,'8px','WinUI panel radius');
+    assert.equal(metrics.title.size,'20px','WinUI page title size');
+    assert.equal(metrics.title.weight,'600');
+    assert.equal(metrics.bar.width,'3px');assert.equal(metrics.bar.height,'16px');
+    assert.equal(metrics.bar.background,metrics.brand,'the selection indicator uses the theme accent');
+    assert.notEqual(metrics.selectedFill,'rgba(0, 0, 0, 0)','the selected item gets a soft fill');
+    assert.notEqual(metrics.selectedFill,metrics.brand,'the selected fill stays neutral');
+    assert.equal(metrics.selectedWeight,'600');
+    assert(metrics.switches.length>0,`${title}: fixture contains toggles`);
+    for(const state of metrics.switches) {
+      assert.deepEqual(state.track,[40,20],`${title}/${scheme}: WinUI toggle track`);
+      assert.deepEqual(state.thumb,[12,12],`${title}/${scheme}: WinUI toggle thumb`);
+      assert.equal(state.inset,state.checked==='true'?24:4,`${title}/${scheme}: thumb travels to the correct edge without clipping`);
+    }
+    await page.locator('[data-shortcut-modal]').screenshot({path:`${output}windows-${windowsSlug(title)}-${scheme}.png`});
+    console.log(`Windows ${title}/${scheme}: WinUI navigation, heading, cards, toggles and scope verified`);
   }
+  // 开关全状态与键盘可达性（WinUI 轨道 + 扩展命中区）。
+  await mount('桌宠','light','win32');
+  const winSwitch=page.getByRole('switch',{name:'启用桌宠',exact:true});
+  await winSwitch.evaluate(el=>el.addEventListener('click',()=>el.setAttribute('aria-checked',String(el.getAttribute('aria-checked')!=='true'))));
+  await winSwitch.focus();await page.keyboard.press('Space');
+  assert.equal(await winSwitch.getAttribute('aria-checked'),'false');
+  assert.equal(await winSwitch.evaluate(el=>getComputedStyle(el).outlineStyle),'solid','keyboard focus remains visible');
+  await page.locator('[data-shortcut-modal]').screenshot({path:`${output}windows-pet-switch-off-light.png`});
+  await page.keyboard.press('Space');
+  assert.equal(await winSwitch.getAttribute('aria-checked'),'true');
+  const winDisabled=page.getByRole('switch',{name:'禁用状态',exact:true});assert(await winDisabled.isDisabled());
+  const winHit=await winSwitch.boundingBox();await page.mouse.click(winHit.x+8,winHit.y-6);
+  assert.equal(await winSwitch.getAttribute('aria-checked'),'false','the expanded hit area activates the WinUI switch');
+  console.log('WinUI switch states, keyboard focus and expanded hit area verified.');
+  // 关闭美化 → 恢复官方；减少透明 → 实色回退；卸载 → 清理。
+  await page.evaluate(()=>whale.edit({enabled:false}));
+  await page.waitForFunction(()=>!whale.getState().busy);
+  assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),null);
+  const official=await page.evaluate(()=>{const el=document.querySelector('[data-shortcut-modal] [role="switch"]');return {track:el.getBoundingClientRect().width,thumb:el.firstElementChild.getBoundingClientRect().width,radius:getComputedStyle(document.querySelector('[data-shortcut-modal]')).borderRadius};});
+  assert.equal(official.track,36,'disabling appearance restores the official toggle track');
+  assert.equal(official.thumb,16,'disabling appearance restores the official toggle thumb');
+  assert.equal(official.radius,'16px','disabling appearance restores the official panel radius');
+  await page.evaluate(()=>whale.edit({enabled:true,reduceTransparency:true}));
+  await page.waitForSelector('body[data-whale-settings-platform="windows"]');
+  assert.equal(await page.locator('body[data-whale-settings-reduced]').count(),1,'the Windows extension receives the shared transparency preference');
+  const reduced=await page.evaluate(()=>{const panel=getComputedStyle(document.querySelector('[data-shortcut-modal="settings"]'));const probe=document.createElement('div');probe.style.color=getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-base').trim();document.body.append(probe);const base=getComputedStyle(probe).color;probe.remove();return {panel:panel.backgroundColor,base};});
+  assert.equal(reduced.panel,reduced.base,'reduced transparency flattens Mica to the solid base');
+  assert.equal(await page.locator('body[data-whale-mac-settings-reduced]').count(),0);
+  await page.evaluate(()=>whale.dispose());
+  assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),null,'unload removes the Windows gate');
+  assert.equal(await page.locator('body[data-whale-settings-reduced]').count(),0,'unload removes the shared material preference');
+  console.log('Windows: disable/reduced/unload lifecycle verified.');
   await mount('通用','dark','unknown');
   assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),null,'unknown clients retain official settings');
   await page.evaluate(()=>document.documentElement.setAttribute('data-platform','darwin'));
@@ -225,8 +276,9 @@ try {
   assert.equal(await page.locator('[data-shortcut-modal] [role="switch"]').evaluate(el=>el.getBoundingClientRect().height),16,'a late macOS marker activates the accepted style');
   await page.evaluate(()=>document.documentElement.setAttribute('data-platform','win32'));
   await page.waitForSelector('body[data-whale-settings-platform="windows"]');
-  assert.equal(await page.locator('body[data-whale-mac-settings],body[data-whale-mac-settings-reduced],[data-whale-settings-title]').count(),0,'platform transitions restore original host headings and remove macOS gates');
-  assert.equal(await page.locator('[data-shortcut-modal] [role="switch"]').evaluate(el=>el.getBoundingClientRect().height),20);
+  assert.equal(await page.locator('body[data-whale-mac-settings],body[data-whale-mac-settings-reduced]').count(),0,'platform transitions remove macOS gates');
+  assert.equal(await page.locator('[data-whale-settings-title]').getAttribute('data-whale-settings-title'),'通用','the Windows heading takes over after a platform switch');
+  assert.equal(await page.locator('[data-shortcut-modal] [role="switch"]').evaluate(el=>el.getBoundingClientRect().width),40,'the WinUI switch takes over after a platform switch');
   await page.evaluate(()=>document.documentElement.removeAttribute('data-platform'));
   await page.waitForFunction(()=>!document.body.hasAttribute('data-whale-settings-platform'));
   console.log('Late client markers and macOS → Windows → official fallback transitions verified.');

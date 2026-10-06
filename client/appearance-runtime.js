@@ -50,7 +50,9 @@ function createAppearanceController(ctx, call) {
     document.body.toggleAttribute('data-whale-glass-input', !!(config?.enabled && config.glassInput && !reduced));
     const settingsPlatform = applySettingsPlatform(document, { enabled: !!config?.enabled, reduced });
     const macSettings = settingsPlatform === 'macos';
-    paintSettingsTitles(macSettings);
+    // macOS and Windows both copy the active section label into the page
+    // heading; each platform renders it with its own stylesheet.
+    paintSettingsTitles(macSettings || settingsPlatform === 'windows');
     const scheme = ctx.theme?.getTheme().active.colorScheme ?? 'light';
     const p = palette(config?.[scheme] ?? normalizeAppearance()[scheme]);
     // macOS sidebar selection uses a light label. Keep the theme's accent hue,
@@ -61,6 +63,15 @@ function createAppearanceController(ctx, call) {
     document.body.style.setProperty('--whale-glass-text', readable(p.fg, worst));
     const active = config?.enabled && config.background !== 'none' && !reduced
       && (config.background !== 'image' || imageURL !== null);
+    // Windows 原生窗口按钮（最小化/关闭…）的覆盖层由官方 preload 从 body 上解析
+    // 的 --dsw-specific-sidebar-fill 取值（隐藏探针 + IPC，页面改不了原生层）。
+    // 背景模式生效时把它置为 transparent，原生按钮区就透出网页顶栏（磨砂），
+    // 不会在右上角留一块与主题不符的官方白色；其余状态/平台保持官方值原样。
+    if (document.documentElement?.hasAttribute?.('data-windows-titlebar') === true && active) {
+      document.body.style.setProperty('--dsw-specific-sidebar-fill', 'transparent');
+    } else {
+      document.body.style.removeProperty('--dsw-specific-sidebar-fill');
+    }
     if (!active) { removeLayers(); return; }
     const next = findWallpaperFrames(document);
     for (const [frame, layer] of layers) if (!next.has(frame)) {
@@ -177,7 +188,8 @@ function createAppearanceController(ctx, call) {
       observer?.disconnect(); tokenDisposer?.(); removeLayers(); paintSettingsTitles(false); ++imageTask;
       if (imageURL) URL.revokeObjectURL(imageURL);
       clearSettingsPlatform(document);
-      document.body?.removeAttribute('data-whale-glass-input'); document.body?.style.removeProperty('--whale-glass-text'); document.body?.style.removeProperty('--whale-mac-selection-fill'); listeners.clear();
+      document.body?.removeAttribute('data-whale-glass-input'); document.body?.style.removeProperty('--whale-glass-text'); document.body?.style.removeProperty('--whale-mac-selection-fill');
+      document.body?.style.removeProperty('--dsw-specific-sidebar-fill'); listeners.clear();
     },
   };
   if (hasTheme && document.body) {

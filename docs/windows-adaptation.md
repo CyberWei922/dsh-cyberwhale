@@ -99,6 +99,52 @@ macOS 继续用 stdin，一行没动。
 **没动的**：`helper/renderer/index.html`、`helper/renderer/pet.css`、`lib/settings.js`、`lib/state.js`、
 `lib/activity.js`、`lib/index.js`、`client/`、`assets/`（图集）、`cordis.patch.yml`。
 
+### 3.1 后续修复：会话列表渐隐条在用户名上方露白（Windows，2026-10）
+
+真机现象：开启「美化」且背景非 `none` 时，侧栏左下角、账号行上方出现一条约 24px 高的白色横条。
+
+根因：官方工作区列表底部有一条滚动渐隐条 `span`（`dsh-client-ui-workspace` 的
+`WorkspaceBrowser.module.css`，`height:24px; position:absolute; bottom:0`），
+`background:linear-gradient(transparent, var(--dsw-specific-sidebar-fill))`。
+官方只在 `[data-platform=darwin]` 下 `display:none`（因为 macOS 侧栏是半透明的），
+Windows 保留它渐隐到**不透明的官方侧栏底色**；插件把侧栏改成半透明后，这层底色就露成了白带。
+
+修复（`client/appearance-css.js` 一条规则）：
+
+```css
+html[data-windows-titlebar] [data-whale-wallpaper-frame] [data-slot="sidebar"] {--dsw-specific-sidebar-fill:transparent}
+```
+
+- 只在 **Windows + 美化生效（`data-whale-wallpaper-frame`）+ 侧栏子树**内把该 token 归零；
+  `darwin` 选择器不在作用域内，macOS 一行不动，主内容区（trajectory 表头、schedule notice 等同样使用该 token 的面板）也不受影响。
+- 不使用官方 CSS Module 哈希类名（遵守 `settings-css.js` 同款约定），官方升级最坏回落到白带而不是错隐元素。
+- 验证：CDP 实测渐隐条计算样式变为 `linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))`；
+  PrintWindow 截图确认白带消失、折叠/展开无残留；`npm test` 全过，`test-appearance.mjs` 增加作用域回归断言。
+
+### 3.2 后续修复：收起侧栏按钮被下拉一个标题栏高度（Windows，2026-10）
+
+真机现象：开启「美化」后，侧栏**收起按钮出现在「deepseek HARNESS」品牌行**（标题栏下一行），
+而不是官方布局的标题栏内；侧栏收起时按钮还会整个消失，展开时才重新出现——看起来像"展开后按钮下移了一个位置"。
+
+根因：官方 Windows 布局把收起按钮（`_2H3hWW_toggle`）和新会话按钮（收起态的 `_2H3hWW_newSession`）
+用 `position:fixed` 固定在标题栏（`top:(titlebar-28)/2`）。插件此前把 `backdrop-filter` 直接挂在侧栏列
+（`sidebarCol`）上 —— **带 `backdrop-filter` 的元素会成为其后代 fixed/absolute 元素的包含块**，
+两个按钮的定位基准从视口变成侧栏列（其顶部在 40px 标题栏之下），于是整体下拉 40px；
+侧栏收起时列宽为 0、列又是 `overflow:hidden`，按钮被裁掉。
+
+Electron 40.10.2 最小页复现：`backdrop-filter` 在列上 → 按钮 `y=46`；移除后 → `y=6`。
+
+修复（`client/appearance-css.js`）：半透明底色留在侧栏列上，磨砂移到 `::before`（另行补 `position:relative` 作包含块）：
+
+```css
+[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"]) {position:relative;background:color-mix(in srgb,var(--dsw-alias-bg-base) 24%,transparent) !important}
+[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"])::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;backdrop-filter:blur(28px) saturate(140%);-webkit-backdrop-filter:blur(28px) saturate(140%)}
+```
+
+- 伪元素不包含任何后代，两个 fixed 按钮恢复以视口定位；磨砂对壁纸的采样与原先一致（负 z-index 层内、树序在壁纸之后）。
+- 验证：真实 Desktop 实测按钮 `y=6`（标题栏内）、列 `backdrop-filter:none`、`::before` 为 `blur(28px)`；
+  展开/收起两态截图正常；`test-appearance.mjs` 增加两条回归断言（磨砂不得挂在列上、必须挂在 ::before）。
+
 ---
 
 ## 4. 真机验证证据

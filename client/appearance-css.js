@@ -71,10 +71,19 @@ const CSS = `
 [data-whale-wallpaper-frame] [data-slot="sidebar"] > *,
 [data-whale-wallpaper-frame] [data-composer-seat],
 [data-whale-wallpaper-frame] [data-chat-flow] {background:transparent !important}
-/* Sample the in-window wallpaper. Harness's native vibrancy stays behind the Web view. */
-[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"]) {background:color-mix(in srgb,var(--dsw-alias-bg-base) 24%,transparent) !important;backdrop-filter:blur(28px) saturate(140%);-webkit-backdrop-filter:blur(28px) saturate(140%)}
+/* Sample the in-window wallpaper. Harness's native vibrancy stays behind the Web view.
+   backdrop-filter 不能挂在侧栏列本身：它会成为列内 position:fixed 后代的包含块，
+   把官方固定在标题栏的收起按钮和新会话按钮下拉一个标题栏高度（折叠时还会被
+   overflow:hidden 裁掉）。磨砂放到 ::before 上，两个 fixed 按钮留在标题栏。 */
+[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"]) {position:relative;background:color-mix(in srgb,var(--dsw-alias-bg-base) 24%,transparent) !important}
+[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"])::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;backdrop-filter:blur(28px) saturate(140%);-webkit-backdrop-filter:blur(28px) saturate(140%)}
 /* Windows owns its drag strip with ::before; keep its geometry and mouse handling. */
 html[data-windows-titlebar] [data-whale-wallpaper-frame]::before {background:color-mix(in srgb,var(--dsw-alias-bg-base) 36%,transparent) !important;backdrop-filter:blur(28px) saturate(140%);-webkit-backdrop-filter:blur(28px) saturate(140%)}
+/* Windows 的会话列表底部有一条 24px 渐隐条，渐隐到官方不透明的侧栏底色
+   （macOS 官方直接隐藏它）。主题把侧栏改成半透明后，这层底色会在用户名上方
+   露成一条白带；只在 Windows 的侧栏子树上把该 token 归零让渐隐条随主题消失，
+   主内容区与 macOS 一行不动。 */
+html[data-windows-titlebar] [data-whale-wallpaper-frame] [data-slot="sidebar"] {--dsw-specific-sidebar-fill:transparent}
 @supports not (backdrop-filter:blur(1px)) {[data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"]) {background:var(--dsw-alias-bg-base) !important}}
 body[data-whale-glass-input] [data-composer-card] {background:color-mix(in srgb,var(--dsw-alias-bg-base) 84%,transparent);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary) 13%,transparent);box-shadow:inset 0 1px 0 #ffffff2e,0 10px 32px #00000014;--dsw-alias-label-primary:var(--whale-glass-text)}
 @supports not (backdrop-filter:blur(1px)) {body[data-whale-glass-input] [data-composer-card] {background:var(--dsw-specific-input-major)}}
