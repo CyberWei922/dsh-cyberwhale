@@ -92,12 +92,17 @@ try {
     }
     await page.evaluate(() => window.whale.edit({ background: 'image', wallpaper: { id: 'a'.repeat(64), name: 'fixture.png' }, blur: 0, imageFit: 'cover', imagePosition: 'center' }));
     await page.waitForFunction(() => document.querySelector('.dsh-whale-wallpaper')?.style.backgroundImage.includes('url('));
+    await page.waitForFunction(() => !window.whale.getState().busy);
+    // Let shell reconciliation finish before temporarily replacing its image
+    // for a pixel probe; a queued paint would restore the image mid-capture.
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const inspect = () => page.evaluate(() => {
       const layer = document.querySelector('.dsh-whale-wallpaper'), box = layer.getBoundingClientRect(), side = document.querySelector('.side');
       return { box: { x: box.x, y: box.y, width: box.width, height: box.height },
         position: getComputedStyle(layer).position, z: getComputedStyle(layer).zIndex,
         image: layer.style.backgroundImage, fit: layer.style.backgroundSize,
-        filter: getComputedStyle(side).backdropFilter, sidebarRoot: getComputedStyle(document.querySelector('.sidebar-root')).backgroundColor,
+        filter: getComputedStyle(side).backdropFilter, frost: getComputedStyle(side, '::before').backdropFilter,
+        sidebarRoot: getComputedStyle(document.querySelector('.sidebar-root')).backgroundColor,
         main: getComputedStyle(document.querySelector('.main')).backgroundColor, conversation: getComputedStyle(document.querySelector('.conversation')).backgroundColor,
         flow: getComputedStyle(document.querySelector('[data-chat-flow]')).backgroundColor,
         code: getComputedStyle(document.querySelector('#code')).backgroundColor, composer: getComputedStyle(document.querySelector('[data-composer-card]')).backgroundColor,
@@ -110,10 +115,24 @@ try {
     assert.deepEqual(original.box, { x: 0, y: 0, width: 1280, height: 800 });
     assert.equal(original.position, 'fixed'); assert.equal(original.z, '-1');
     assert.equal(original.sidebarRoot, transparent); assert.equal(original.main, transparent); assert.equal(original.conversation, transparent); assert.equal(original.flow, transparent);
-    assert.match(original.filter, /blur\(28px\)/);
+    assert.equal(original.filter, 'none', 'the sidebar column must not move fixed titlebar buttons');
+    assert.match(original.frost, /blur\(28px\)/, 'the independent material layer retains the sidebar frost');
     assert.equal(original.code, 'rgb(67, 69, 74)'); assert.equal(original.composer, 'rgb(215, 217, 224)');
     assert.equal(original.button, 'rgb(129, 140, 159)');
     assert.equal(original.editorLayers, 0); assert.equal(original.overlays, 0);
+    const wallpaperStyle = await page.locator('.dsh-whale-wallpaper').getAttribute('style');
+    await page.locator('.dsh-whale-wallpaper').evaluate(el => { el.style.background = 'repeating-linear-gradient(90deg,#e06060 0 14px,#4060e0 14px 28px)'; });
+    const blurred = decodePng(await page.screenshot());
+    const distance = (a, b) => Math.max(...a.slice(0, 3).map((v, i) => Math.abs(v - b[i])));
+    const blurDelta = distance(pixel(blurred, 140, 400), pixel(blurred, 154, 400));
+    assert(blurDelta <= 6, `${platform}/${scheme}: the sidebar material must suppress sharp wallpaper stripes`);
+    assert(distance(pixel(blurred, 800, 400), pixel(blurred, 814, 400)) >= 100, 'the wallpaper probe must stay sharp outside the sidebar');
+    await page.addStyleTag({ content: '[data-whale-wallpaper-frame] > .side::before {backdrop-filter:none;-webkit-backdrop-filter:none}' });
+    const sharp = decodePng(await page.screenshot());
+    const sharpDelta = distance(pixel(sharp, 140, 400), pixel(sharp, 154, 400));
+    assert(sharpDelta >= 100, 'the sidebar probe must distinguish actual blur from tint alone');
+    await page.evaluate(() => document.head.lastElementChild.remove());
+    await page.locator('.dsh-whale-wallpaper').evaluate((el, style) => el.setAttribute('style', style), wallpaperStyle);
     const before = decodePng(await page.screenshot());
     await page.evaluate(() => { const frame = document.querySelector('.frame'); frame.setAttribute('data-sidebar-collapsed', ''); frame.style.gridTemplateColumns = '0px minmax(0,1fr) 0px'; });
     const collapsed = await inspect(), after = decodePng(await page.screenshot());
@@ -130,6 +149,7 @@ try {
     await page.evaluate(() => window.whale.edit({ reduceTransparency: true }));
     assert.equal(await page.locator('.dsh-whale-wallpaper').count(), 0); assert.equal(await page.locator('[data-whale-wallpaper-frame]').count(), 0);
     assert.equal(await page.locator('.side').evaluate(el => getComputedStyle(el).backdropFilter), 'none');
+    assert.equal(await page.locator('.side').evaluate(el => getComputedStyle(el, '::before').backdropFilter), 'none');
     await page.waitForFunction(() => !window.whale.getState().busy);
     await page.evaluate(() => window.whale.edit({ reduceTransparency: false }));
     await page.waitForSelector('.dsh-whale-wallpaper');

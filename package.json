@@ -1,7 +1,7 @@
 {
   "name": "dsh-cyberwhale",
-  "version": "0.2.0-preview.1",
-  "description": "一只随 DeepSeek Harness 工作状态变化的蓝色大肥鱼桌宠",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 的 macOS 与 Windows 双端视觉本地化、主题美化和可选蓝鲸桌宠插件",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -62,8 +62,13 @@
     "deepseek-harness",
     "dsh",
     "dsh-plugin",
+    "theme",
+    "customization",
+    "wallpaper",
+    "macos",
+    "windows",
+    "winui",
     "desktop-pet",
-    "pet",
     "whale"
   ],
   "engines": {

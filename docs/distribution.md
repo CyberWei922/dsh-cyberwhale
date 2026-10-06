@@ -85,11 +85,11 @@ npm pack                     # 产出 dsh-cyberwhale-<version>.tgz
 ```bash
 # 1) 改版本号（tag 必须和 package.json 的 version 一致，workflow 会校验）
 # 2) 提交后打 tag 并推
-git tag -a v0.1.4 -m "v0.1.4：改了什么"
-git push origin main --tags
+git tag -a v1.0.0 -m "v1.0.0：双端视觉本地化与外观美化正式版"
+git push origin main refs/tags/v1.0.0
 ```
 
-workflow 会依次：校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 →
+workflow 会依次：安装构建依赖 → 校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 →
 跑与平台无关的测试 → `npm pack` → 建 GitHub Release 并附上 `.tgz` → 发布到 npm。
 
 **逐条命令和踩过的坑见下面的[「发布：推 tag 就完事」](#发布推-tag-就完事全自动)。**
@@ -99,7 +99,7 @@ workflow 会依次：校验 tag 与版本一致 → 重建 `lib/client.js` 并�
 
 npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（版本号重复、token 失效、2FA 没配好等），GitHub Release 和 `.tgz` 附件也已经产出了 —— 不会因为一条通道挂掉就什么都拿不到。
 
-> workflow 里的测试步骤是我在 macOS 上验证过的那几支（不含依赖本机进程扫描的 `test-host`）。Linux runner 上若有个别测试行为不同，把对应那一行删掉即可，不影响发布主线。
+> workflow 运行跨平台逻辑、外观存储与平台设置测试；本地另跑完整 `npm test` 及需要 Harness 安装包的渲染专项。CI 的失败需要定位并修复后再发布。
 
 ## npm 账号与自动发布的配置记录
 
@@ -128,12 +128,16 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
-**当前状态：v0.1.4 已双端发布** —— <https://www.npmjs.com/package/dsh-cyberwhale> 与
-<https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v0.1.4>（带 provenance 证明）。
+**当前正式版本：v1.0.0**。发布通道为 [npm](https://www.npmjs.com/package/dsh-cyberwhale) 与
+[GitHub Release](https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v1.0.0)，版本内容见 [1.0 正式版说明](release-1.0.0.md)。发布结果以 Actions 和对应下载页面为准。
 
 **发布是全自动的：推一个 `v*` tag 就够了。** 详见下面的「发布」。
 
-### v0.1.4 改了什么
+### v1.0.0 改了什么
+
+产品范围从桌宠扩展为 Harness 的双端视觉本地化和外观美化：macOS 与 Windows WinUI 3 风格设置界面、27 个浅深配色选项、自定义三色、壁纸与图片取色、字体设置及自动保存。蓝鲸桌宠继续作为独立可选功能。两端日常使用已由维护者确认，README 按正式产品范围重写。
+
+### 历史版本 v0.1.4
 
 **运行时下载源改成用户可选，去掉自动回退。**
 
@@ -223,18 +227,18 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 **日常发版就四步**：
 
 ```bash
-# 1. 改版本号（三处：package.json 和文档里的当前状态）
+# 1. 改版本号并同步文档（同时更新 package.json 与 package-lock.json）
 npm version patch --no-git-tag-version     # 或手动改 package.json
 
 # 2. 本地跑一遍完整测试（workflow 也会跑，但本地更快发现）
 npm test
 
 # 3. 提交
-git add package.json docs/distribution.md && git commit -m "chore: 发布 0.1.4（改了什么）"
+git add package.json package-lock.json README.md docs/distribution.md && git commit -m "chore: 发布新版本"
 
 # 4. 打 tag 并推 —— 这一步就是发布
-git tag -a v0.1.4 -m "v0.1.4：改了什么"
-git push origin main --tags
+git tag -a v1.0.0 -m "v1.0.0：双端视觉本地化与外观美化正式版"
+git push origin main refs/tags/v1.0.0
 ```
 
 推完用 `gh run watch` 看进度，约 30 秒。
@@ -247,7 +251,7 @@ git push origin main --tags
 |---|---|
 | **tag 与 `package.json` 版本一致** | 打错 tag、忘了改版本号 |
 | **重建 `lib/client.js` 后 git diff 必须干净** | 改了 `client/index.js` 却忘了 `node client/build.mjs` |
-| **跑 8 个与平台无关的测试** | 回归（`test-host` 不跑 —— 它依赖本机进程扫描，CI 上不稳定）|
+| **运行跨平台、外观和设置测试** | 回归（`test-host` 不跑 —— 它依赖本机进程扫描，CI 上不稳定）|
 
 > **发布前一定本地跑一次 `npm test`** —— CI 少了 `test-host`，本地才是全套。
 
