@@ -31,8 +31,8 @@
 
 <table>
   <tr>
-    <th width="50%">🍎 macOS · 系统设置风格</th>
-    <th width="50%">🪟 Windows · WinUI 3 风格</th>
+    <th width="50%"><img src="docs/images/logo-apple.svg" alt="Apple" width="16" height="18"> macOS · 系统设置风格</th>
+    <th width="50%"><img src="docs/images/logo-windows.svg" alt="Windows" width="16" height="16"> Windows · WinUI 3 风格</th>
   </tr>
   <tr>
     <td valign="top">
@@ -56,8 +56,8 @@ DeepSeek Harness 提供了一个好用的 AI 工作环境，但它的界面与 m
 
 CyberWhale 为 Harness 做了一套**双端视觉本地化**，参考两套系统各自熟悉的界面样式，让软件在视觉上更融入你的桌面：
 
-- 🍎 **在 macOS 上**，设置页采用系统设置风格的圆角分组、小型开关和磨砂侧栏。
-- 🪟 **在 Windows 上**，设置页参考 WinUI 3 的导航、设置卡片、圆形开关滑块和材质层次。
+- <img src="docs/images/logo-apple.svg" alt="Apple" width="16" height="18"> **在 macOS 上**，设置页采用系统设置风格的圆角分组、小型开关和磨砂侧栏。
+- <img src="docs/images/logo-windows.svg" alt="Windows" width="16" height="16"> **在 Windows 上**，设置页参考 WinUI 3 的导航、设置卡片、圆形开关滑块和材质层次。
 - 🎨 **在两端都能个性化**，选择主题、更换壁纸、调整字体，搭配自己的工作环境。
 
 插件会自动识别客户端系统，使用对应的设置界面。配色、字体和背景功能在两端共享，蓝鲸桌宠可以单独开启或关闭。
@@ -68,14 +68,14 @@ CyberWhale 为 Harness 做了一套**双端视觉本地化**，参考两套系�
 
 | 功能 | 你能得到什么 |
 | --- | --- |
-| 🍎 **macOS 风格设置界面** | 圆角分组、细分隔线、小型开关、磨砂侧栏，以及随当前分区变化的标题 |
-| 🪟 **Windows WinUI 3 风格设置界面** | 带强调色指示条的导航、设置卡片、小圆角控件与 Mica 风格的底色层次 |
+| <img src="docs/images/logo-apple.svg" alt="Apple" width="16" height="18"> **macOS 风格设置界面** | 圆角分组、细分隔线、小型开关、磨砂侧栏，以及随当前分区变化的标题 |
+| <img src="docs/images/logo-windows.svg" alt="Windows" width="16" height="16"> **Windows WinUI 3 风格设置界面** | 带强调色指示条的导航、设置卡片、小圆角控件与 Mica 风格的底色层次 |
 | 🎨 **27 个浅深色主题选项** | 浅色 10 个、深色 17 个，包含 Catppuccin、Nord、Dracula、Tokyo Night 等配色与蓝鲸原创主题 |
 | 🖌️ **自定义配色** | 分别调整浅色和深色模式的强调色、背景色、文字色，自动派生界面表面和边界颜色 |
 | 🖼️ **纯色、渐变与图片背景** | 三套渐变或自己的 PNG、JPEG、WebP 图片；可调整图片布局、背景遮罩和图片模糊 |
 | 🌈 **从壁纸生成配色** | 提取图片中的候选主色，选择后生成配套的浅色与深色方案 |
 | 🔤 **界面与代码字体** | 读取本机字体，分别选择界面字体和代码字体；正文字号沿用 Harness 的设置 |
-| 🪟 **磨砂与阅读设置** | 可开启输入框磨砂，或减少透明效果、使用实色表面 |
+| **磨砂与阅读设置** | 可开启输入框磨砂，或减少透明效果、使用实色表面 |
 | 💾 **立即生效与自动保存** | 调整后直接看到变化，设置自动保存，重新打开后继续使用 |
 | 🐋 **可选蓝鲸桌宠** | 随任务切换动作、显示进度气泡，也能拖动、打招呼和跟随鼠标注视 |
 
