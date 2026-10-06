@@ -226,6 +226,7 @@ try {
   const windowsSlug=title=>title==='主题'?'theme':title==='桌宠'?'pet':'general';
   for(const scheme of ['light','dark']) for(const title of ['通用','主题','桌宠']) {
     await mount(title,scheme,'win32');
+    await page.mouse.move(4,752);
     assert.equal(await page.locator('body').getAttribute('data-whale-settings-platform'),'windows');
     assert.equal(await page.locator('body[data-whale-mac-settings],body[data-whale-mac-settings-reduced]').count(),0,'Windows never takes macOS gates');
     assert.equal(await page.evaluate(()=>document.body.style.getPropertyValue('--whale-mac-selection-fill')),'');
@@ -249,9 +250,9 @@ try {
     assert.equal(metrics.selectedWeight,'600');
     assert(metrics.switches.length>0,`${title}: fixture contains toggles`);
     for(const state of metrics.switches) {
-      assert.deepEqual(state.track,[40,20],`${title}/${scheme}: WinUI toggle track`);
-      assert.deepEqual(state.thumb,[12,12],`${title}/${scheme}: WinUI toggle thumb`);
-      assert.equal(state.inset,state.checked==='true'?24:4,`${title}/${scheme}: thumb travels to the correct edge without clipping`);
+      assert.deepEqual(state.track,[40,20],`${title}/${scheme}: WinUI toggle track ${JSON.stringify(state)}`);
+      assert.deepEqual(state.thumb,[12,12],`${title}/${scheme}: WinUI toggle thumb ${JSON.stringify(state)}`);
+      assert.equal(state.inset,state.checked==='true'?24:4,`${title}/${scheme}: thumb travels to the correct edge without clipping ${JSON.stringify(state)}`);
     }
     await page.locator('[data-shortcut-modal]').screenshot({path:`${output}windows-${windowsSlug(title)}-${scheme}.png`});
     console.log(`Windows ${title}/${scheme}: WinUI navigation, heading, cards, toggles and scope verified`);

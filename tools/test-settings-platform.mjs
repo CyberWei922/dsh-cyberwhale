@@ -74,31 +74,46 @@ win('含减少动态效果适配', css.includes('prefers-reduced-motion:reduce')
 win('含高对比适配', css.includes('prefers-contrast:more'));
 win('含强制颜色适配', css.includes('forced-colors:active'));
 
-// 开关几何按 WinUI：40×20 轨道、12px 圆滑块、4px 内缩、20px 行程。
+// 开关几何按 WinUI 官方：40×20 轨道、1px ControlStrongStroke、12px 圆滑块、
+// 4px 内缩、20px 行程；悬停/按下滑块按官方拉长到 14/17。
 const switchBlock = /\[role="switch"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
 const width = Number(/width:([\d.]+)px/.exec(switchBlock)?.[1]);
 const height = Number(/height:([\d.]+)px/.exec(switchBlock)?.[1]);
-const padding = Number(/padding:([\d.]+)px/.exec(switchBlock)?.[1]);
-const thumb = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*width:([\d.]+)px/.exec(css)?.[1]);
-const thumbHeight = Number(/\[role="switch"\]\s*>\s*span\s*\{[^}]*height:([\d.]+)px/.exec(css)?.[1]);
+const thumbBlock = /\[role="switch"\]\s*>\s*span\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+const thumb = Number(/width:([\d.]+)px/.exec(thumbBlock)?.[1]);
+const thumbHeight = Number(/height:([\d.]+)px/.exec(thumbBlock)?.[1]);
+const inset = Number(/left:([\d.]+)px/.exec(thumbBlock)?.[1]);
 const travel = Number(/\[aria-checked="true"\]\s*>\s*span\s*\{[^}]*translateX\(([\d.]+)px\)/.exec(css)?.[1]);
-win('开关几何取到了值', [width, height, padding, thumb, thumbHeight, travel].every(Number.isFinite), `${width}/${height}/${padding}/${thumb}/${travel}`);
-win('开关几何为 WinUI 规格（40×20）', width === 40 && height === 20 && padding === 4, `${width}×${height} 内缩 ${padding}`);
-win('滑块为 12px 圆形', thumb === 12 && thumbHeight === 12, `${thumb}×${thumbHeight}`);
-win('开关行程与几何一致', width - 2 * padding - thumb === travel, `${width} - ${padding}*2 - ${thumb} = ${width - 2 * padding - thumb}，translateX ${travel}`);
+win('开关几何取到了值', [width, height, thumb, thumbHeight, inset, travel].every(Number.isFinite), `${width}/${height}/${thumb}/${inset}/${travel}`);
+win('开关几何为 WinUI 规格（40×20）', width === 40 && height === 20, `${width}×${height}`);
+win('滑块为 12px 圆形、4px 内缩', thumb === 12 && thumbHeight === 12 && inset === 4, `${thumb}×${thumbHeight} 内缩 ${inset}`);
+win('开关行程与几何一致', width - 2 * inset - thumb === travel, `${width} - ${inset}*2 - ${thumb} = ${width - 2 * inset - thumb}，translateX ${travel}`);
+win('悬停/按下滑块按官方拉长（14/17）',
+  /\[role="switch"\]:hover:not\(:disabled\)\s*>\s*span\s*\{[^}]*width:14px/.test(css) &&
+  /\[role="switch"\]:active:not\(:disabled\)\s*>\s*span\s*\{[^}]*width:17px/.test(css));
+win('开关底色/描边走官方 ControlAltFill + ControlStrongStroke',
+  /\[role="switch"\]\s*\{[^}]*background:var\(--whale-win-alt-off\)[^}]*box-shadow:inset 0 0 0 1px var\(--whale-win-strong-stroke\)/.test(css));
+win('关闭态滑块用主题文字色（非灰色）', thumbBlock.includes('background:var(--dsw-alias-label-primary)'), thumbBlock.slice(0, 80));
 win('开启态填充主题强调色', /\[role="switch"\]\[aria-checked="true"\]\s*\{[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
 win('开启态滑块用主题反色文字', /\[aria-checked="true"\]\s*>\s*span\s*\{[^}]*background:var\(--dsw-alias-label-primary-foreground\)/.test(css));
-win('选中导航项用柔和中性底色 + 强调色短竖条',
-  /nav button\[aria-current="true"\]\s*\{[^}]*color-mix\(in srgb,var\(--dsw-alias-label-primary\)/.test(css) &&
+win('选中导航项用官方 SubtleFill 档 + 强调色短竖条',
+  /nav button\[aria-current="true"\]\s*\{[^}]*background:var\(--whale-win-subtle-secondary\)/.test(css) &&
+  /nav button\[aria-current="true"\]:hover\s*\{[^}]*var\(--whale-win-subtle-tertiary\)/.test(css) &&
   /nav button\[aria-current="true"\]::before\s*\{[^}]*width:3px[^}]*height:16px[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
+win('内容列使用 NavigationViewContentBackground（LayerFill）', /> nav \+ div\s*\{[^}]*background:var\(--whale-win-layer\)/.test(css));
 win('页面标题用 WinUI 标题字号阶梯', /\[data-whale-settings-title\]::before\s*\{[^}]*font-size:20px[^}]*font-weight:600/.test(css));
 win('面板圆角 8px、控件圆角 4px', /\{[^}]*border-radius:8px/.test(css) && /border-radius:4px/.test(css));
 win('主题相关变量统一 --whale-win-* 前缀', css.includes('--whale-win-mica') && !/--whale-(?!win-)[a-z]/.test(css));
-// 平铺行：透明底、无边框、细分割线；悬停只加极淡中性底色（无白色凸起）。
+// 填充/描边采用官方 Light + Dark 双档原值（黑/白 alpha），由 data-ds-dark-theme 切换。
+win('Light/Dark token 双档为官方 alpha 原值',
+  css.includes('--whale-win-subtle-secondary:rgba(0,0,0,.0353)') && css.includes('--whale-win-subtle-secondary:rgba(255,255,255,.0588)') &&
+  css.includes('--whale-win-layer:rgba(255,255,255,.5)') && css.includes('--whale-win-layer:rgba(255,255,255,.0538)') &&
+  css.includes('--whale-win-control-fill:rgba(255,255,255,.702)') && css.includes('--whale-win-control-fill:rgba(255,255,255,.0588)'));
+// 平铺行：透明底、无边框、官方 DividerStroke 分割线；悬停只加 SubtleFillColorSecondary。
 win('设置行平铺（无卡片白底/边框，细分割线分隔）',
   /:is\(\.dsh-appearance-row,\s*\.dsh-whale-row\)[^{]*\{[^}]*background-color:transparent[^}]*\}/.test(css) &&
   /background-size:100% 1px/.test(css) && !css.includes('--whale-win-card') && !/var\(--dsw-alias-bg-layer-1\)/.test(css));
-win('行悬停为极淡中性底色', /:hover\s*\{[^}]*color-mix\(in srgb,var\(--dsw-alias-label-primary\) 4%/.test(css));
+win('行悬停用官方 SubtleFillColorSecondary', /:hover\s*\{[^}]*background-color:var\(--whale-win-subtle-secondary\)/.test(css));
 // WinUI 下拉面板：4px 字段 + 8px 圆角弹层 + 选中项 3×16 强调色短竖条（无白色凸起）。
 win('WinUI 下拉面板样式（字段/弹层/选中强调条）',
   /\.dsh-win-combo-trigger\s*\{[^}]*border-radius:4px[^}]*\}/.test(css) &&

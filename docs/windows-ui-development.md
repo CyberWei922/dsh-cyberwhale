@@ -81,6 +81,8 @@ body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-
 
 强调色和表面色继续使用共享主题变量，例如 `--dsw-alias-brand-primary`、`--dsw-alias-state-business-primary`、`--dsw-alias-bg-base`、`--dsw-alias-bg-layer-1`、`--dsw-alias-bg-layer-2`、`--dsw-alias-label-primary`、`--dsw-alias-label-secondary`、`--dsw-alias-border-l2`。Windows 专用变量建议用 `--whale-win-*` 前缀。不要强制全页面使用固定蓝色或黑白配色；自定义主题也应保持可读性。
 
+Windows 样式层的填充 / 描边 / 焦点数值直接采用微软公开的 Fluent/WinUI 3 token 原值（来源：`microsoft-ui-xaml` 的 `Common_themeresources_any.xaml`，并与 FluentKit / fluent-svelte 的 CSS 移植逐项核对）：Light 档为黑/白 alpha、Dark 档为白 alpha，由 `data-ds-dark-theme` 切换（与 WinUI 切换 Light/Default 词典同构）。文本与强调色仍走共享 `--dsw-*` 变量，保证 27 套主题可读。控件解剖（ComboBox 触发/弹层/选中竖条、ToggleSwitch 几何与悬停拉长、NavigationView 项与指示条）按 WinUI 3 Gallery / FluentKit 实现对齐；圆环单选与 4px/8px 圆角同样来自官方几何。
+
 按钮、输入框、选择器、开关均需覆盖普通、悬停、按下、选中、键盘焦点和禁用状态。保留 `:focus-visible`、`prefers-reduced-motion`、`forced-colors` 的适配；如添加透明效果，同时尊重插件减少透明开关和系统偏好。窄窗口允许设置行换行或调整列宽，所有导航项和控件仍须可达。
 
 ## 开发和验收

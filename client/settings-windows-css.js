@@ -1,19 +1,25 @@
 'use strict';
 
 /**
- * Windows / WinUI 3 visual layer for the settings dialog.
+ * Windows settings layer, written against Microsoft's own Fluent tokens.
  *
- * Reference: WinUI 3 Gallery (NavigationView, ToggleSwitch, Button, ComboBox,
- * TextBox) and the Windows design guides for typography, rounded corners and
- * Mica. This is a Web approximation: a flat, opaque Mica-like base with a
- * restrained accent tint, thin strokes and 4px control radii (8px panel).
+ * The fill/stroke/focus numbers are the exact WinUI 3 semantic values
+ * transcribed from `microsoft-ui-xaml`'s Common_themeresources_any.xaml
+ * (cross-checked against the FluentKit CSS token layer and fluent-svelte's
+ * control ports): light uses black/white alphas, dark uses white alphas, and
+ * the two are switched by data-ds-dark-theme, the same way WinUI swaps its
+ * Light/Default theme dictionaries. Text colors and accents keep the plugin's
+ * shared --dsw-* tokens so all 27 theme presets stay readable.
  *
- * Scope every rule to the Windows gate the appearance controller sets on the
- * client document. Use shared --dsw-* tokens so all 27 theme presets keep
- * working, and keep host DOM, ARIA and keyboard behavior untouched.
- * Do not use official CSS Module hash names: they change on every build.
+ * Key sources:
+ *   - microsoft-ui-xaml Common_themeresources_any.xaml (Text/Control/Subtle/
+ *     ControlAlt/ControlStrong fills, strokes, focus, dividers, layer/card)
+ *   - fluent-svelte / FluentKit ports (ComboBox trigger + item anatomy,
+ *     ToggleSwitch geometry, NavigationView item + selection indicator)
+ *   - WinUI-Gallery spacing/geometry pages (4px grid, 4/8/999 corner radii)
  *
- * macOS keeps its own stylesheet: nothing here may match a macOS document.
+ * Scope every rule to the Windows gate; never match a macOS document.
+ * No CSS Module hash names, no React node replacement, keyboard/ARIA intact.
  */
 const PANEL = 'body[data-whale-settings-platform="windows"] [data-shortcut-modal="settings"]';
 const DARK = `body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-modal="settings"]`;
@@ -25,23 +31,27 @@ const ROWS = [
   [`${PANEL} :is(.dsh-appearance-row, .dsh-whale-row)`, 'div:is(.dsh-appearance-row, .dsh-whale-row)'],
   [`${GENERAL} > div`, 'div'],
 ];
-// Rows stay flat on the Mica surface, separated by a single hairline divider.
-// Hover is a barely-there neutral tint; nothing lifts, no card fill, no border.
+// Flat list rows (the Windows 11 Sound-page pattern): transparent fill, one
+// divider between rows, hover/press only wash the row with the official
+// SubtleFillColor alphas. Nothing lifts, no card fill, no border.
 const rowRules = ROWS.map(([row, next]) => `
 ${row} {
   box-sizing:border-box;
   position:relative;
-  min-height:56px;
+  min-height:64px;
   padding:12px 16px;
   gap:24px;
   margin:0;
   border:0;
-  border-radius:4px;
+  border-radius:0;
   background-color:transparent;
-  transition:background-color 80ms ease;
+  transition:background-color 150ms cubic-bezier(.33,0,.67,1);
 }
 ${row}:hover {
-  background-color:color-mix(in srgb,var(--dsw-alias-label-primary) 4%,transparent);
+  background-color:var(--whale-win-subtle-secondary);
+}
+${row}:active {
+  background-color:var(--whale-win-subtle-tertiary);
 }
 ${row}:has(+ ${next}) {
   background-image:linear-gradient(var(--whale-win-divider),var(--whale-win-divider));
@@ -53,19 +63,39 @@ ${row}:has(+ ${next}) {
 
 const CSS = `
 ${PANEL} {
-  /* Mica approximation: an opaque base with a whisper of the theme accent.
-   * CSS cannot sample the desktop wallpaper, so this stays a flat material. */
+  /* WinUI 3 Light theme dictionary (exact alphas from Common_themeresources_any.xaml). */
+  --whale-win-text-secondary:rgba(0,0,0,.6196);
+  --whale-win-text-tertiary:rgba(0,0,0,.4471);
+  --whale-win-text-disabled:rgba(0,0,0,.3608);
+  --whale-win-control-fill:rgba(255,255,255,.702);
+  --whale-win-control-fill-hover:rgba(249,249,249,.502);
+  --whale-win-control-fill-pressed:rgba(249,249,249,.302);
+  --whale-win-control-stroke:rgba(0,0,0,.0588);
+  --whale-win-control-stroke-bottom:rgba(0,0,0,.1608);
+  --whale-win-subtle-secondary:rgba(0,0,0,.0353);
+  --whale-win-subtle-tertiary:rgba(0,0,0,.0235);
+  --whale-win-divider:rgba(0,0,0,.0588);
+  --whale-win-alt-off:rgba(0,0,0,.0241);
+  --whale-win-alt-off-hover:rgba(0,0,0,.0578);
+  --whale-win-alt-off-pressed:rgba(0,0,0,.0924);
+  --whale-win-strong-stroke:rgba(0,0,0,.4458);
+  --whale-win-strong-stroke-disabled:rgba(0,0,0,.2169);
+  --whale-win-accent-disabled:rgba(0,0,0,.2157);
+  --whale-win-layer:rgba(255,255,255,.5);
+  --whale-win-acrylic:#fafafa;
+  --whale-win-flyout-border:rgba(0,0,0,.0578);
+  --whale-win-surface-stroke:rgba(0,0,0,.0578);
+  --whale-win-focus-outer:rgba(0,0,0,.8941);
+  --whale-win-focus-inner:rgba(255,255,255,.702);
+  --whale-win-shadow:0 32px 64px rgba(0,0,0,.24);
+  --whale-win-popup-shadow:0 2px 4px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);
+  /* Mica approximation: CSS cannot sample the desktop, so the panel keeps a
+   * flat themed base with a whisper of the theme accent (documented deviation). */
   --whale-win-mica:color-mix(in srgb,var(--dsw-alias-brand-primary) 3%,var(--dsw-alias-bg-base));
-  --whale-win-hairline:color-mix(in srgb,var(--dsw-alias-label-primary) 10%,transparent);
-  --whale-win-divider:color-mix(in srgb,var(--dsw-alias-label-primary) 8%,transparent);
-  --whale-win-stroke:color-mix(in srgb,var(--dsw-alias-label-primary) 45%,transparent);
-  --whale-win-field-fill:color-mix(in srgb,var(--dsw-alias-bg-base) 94%,var(--dsw-alias-label-primary));
-  --whale-win-field-hover:color-mix(in srgb,var(--dsw-alias-bg-base) 90%,var(--dsw-alias-label-primary));
-  --whale-win-field-stroke:color-mix(in srgb,var(--dsw-alias-label-primary) 30%,transparent);
   width:860px;
   max-width:calc(100vw - 48px);
   height:min(700px,calc(100dvh - 48px));
-  border:1px solid var(--whale-win-hairline);
+  border:1px solid var(--whale-win-surface-stroke);
   border-radius:8px;
   corner-shape:round;
   background:var(--whale-win-mica);
@@ -73,25 +103,53 @@ ${PANEL} {
   font-family:var(--dsw-font-family);
   font-size:14px;
   line-height:20px;
-  box-shadow:0 16px 40px #0000002e,0 2px 8px #0000001a;
+  box-shadow:var(--whale-win-shadow);
 }
 ${DARK} {
-  box-shadow:0 16px 40px #00000073,0 2px 8px #0000004d;
+  /* WinUI 3 dark is the "Default" theme dictionary: white alphas over dark Mica. */
+  --whale-win-text-secondary:rgba(255,255,255,.7725);
+  --whale-win-text-tertiary:rgba(255,255,255,.5294);
+  --whale-win-text-disabled:rgba(255,255,255,.3647);
+  --whale-win-control-fill:rgba(255,255,255,.0588);
+  --whale-win-control-fill-hover:rgba(255,255,255,.0824);
+  --whale-win-control-fill-pressed:rgba(255,255,255,.0314);
+  --whale-win-control-stroke:rgba(255,255,255,.0706);
+  --whale-win-control-stroke-bottom:rgba(255,255,255,.0941);
+  --whale-win-subtle-secondary:rgba(255,255,255,.0588);
+  --whale-win-subtle-tertiary:rgba(255,255,255,.0392);
+  --whale-win-divider:rgba(255,255,255,.0824);
+  --whale-win-alt-off:rgba(0,0,0,.1);
+  --whale-win-alt-off-hover:rgba(255,255,255,.042);
+  --whale-win-alt-off-pressed:rgba(255,255,255,.07);
+  --whale-win-strong-stroke:rgba(255,255,255,.5442);
+  --whale-win-strong-stroke-disabled:rgba(255,255,255,.1581);
+  --whale-win-accent-disabled:rgba(255,255,255,.1569);
+  --whale-win-layer:rgba(255,255,255,.0538);
+  --whale-win-acrylic:#2c2c2c;
+  --whale-win-flyout-border:rgba(0,0,0,.2);
+  --whale-win-surface-stroke:rgba(255,255,255,.0578);
+  --whale-win-focus-outer:#ffffff;
+  --whale-win-focus-inner:rgba(0,0,0,.702);
+  --whale-win-shadow:0 32px 64px rgba(0,0,0,.4);
+  --whale-win-popup-shadow:0 8px 16px rgba(0,0,0,.44);
 }
 
 /* ── NavigationView ───────────────────────────────────────────────────────
- * The pane keeps the Mica base and only a hairline splits it from content;
- * the selected item is a soft neutral fill with a short accent bar. */
+ * FluentKit NavigationViewItem port: 36px rows on a 4px corner radius, hover
+ * and selection both SubtleFillColorSecondary, press Tertiary, selection text
+ * semibold, 3×16px accent indicator at the leading edge.  The pane keeps the
+ * Mica base; the content column takes LayerFillColorDefault, exactly like
+ * NavigationViewContentBackground. */
 ${PANEL} > nav {
   width:200px;
   min-width:0;
   padding:20px 10px 12px;
   gap:18px;
   background:transparent;
-  border-right:1px solid var(--whale-win-hairline);
+  border-right:1px solid var(--whale-win-divider);
 }
 ${PANEL} > nav > div:first-child {
-  padding:0 10px;
+  padding:0 8px;
   font-size:16px;
   line-height:22px;
   font-weight:600;
@@ -102,37 +160,39 @@ ${PANEL} nav button {
   position:relative;
   height:36px;
   min-height:36px;
-  padding:0 10px 0 14px;
-  gap:10px;
+  padding:0 8px;
+  gap:8px;
   border-radius:4px;
   font-size:14px;
   line-height:20px;
   font-weight:400;
-  transition:background-color 100ms ease;
+  transition:background-color 150ms cubic-bezier(.33,0,.67,1);
 }
-${PANEL} nav button:hover {background:color-mix(in srgb,var(--dsw-alias-label-primary) 6%,transparent)}
-${PANEL} nav button:active {background:color-mix(in srgb,var(--dsw-alias-label-primary) 10%,transparent)}
+${PANEL} nav button:hover {background:var(--whale-win-subtle-secondary)}
+${PANEL} nav button:active {background:var(--whale-win-subtle-tertiary)}
 ${PANEL} nav button[aria-current="true"] {
-  background:color-mix(in srgb,var(--dsw-alias-label-primary) 8%,transparent);
+  background:var(--whale-win-subtle-secondary);
   font-weight:600;
 }
+${PANEL} nav button[aria-current="true"]:hover {background:var(--whale-win-subtle-tertiary)}
 ${PANEL} nav button[aria-current="true"]::before {
   content:"";
   position:absolute;
-  left:3px;
+  left:0;
   top:50%;
   width:3px;
   height:16px;
   margin-top:-8px;
-  border-radius:2px;
+  border-radius:999px;
   background:var(--dsw-alias-brand-primary);
 }
+${PANEL} nav button > svg {color:var(--whale-win-text-secondary)}
+${PANEL} nav button[aria-current="true"] > svg {color:var(--dsw-alias-label-primary)}
 
 /* ── Page chrome ──────────────────────────────────────────────────────────
- * One flat Mica surface: the content column inherits the panel material, so
- * nothing reads as a raised white slab. The heading uses the WinUI title
+ * Content sits on LayerFillColorDefault; the heading uses the WinUI subtitle
  * ramp (20/28 semibold) and copies the active navigation label. */
-${PANEL} > nav + div {background:transparent}
+${PANEL} > nav + div {background:var(--whale-win-layer)}
 ${PANEL} > nav + div > div:first-child {
   height:64px;
   align-items:center;
@@ -148,29 +208,29 @@ ${PANEL} [data-whale-settings-title]::before {
 ${PANEL} > nav + div > div:first-child > button {
   border-radius:4px;
   background:transparent;
-  color:var(--dsw-alias-label-secondary);
+  color:var(--whale-win-text-secondary);
 }
-${PANEL} > nav + div > div:first-child > button:hover {background:var(--dsw-alias-interactive-bg-hover)}
+${PANEL} > nav + div > div:first-child > button:hover {background:var(--whale-win-subtle-secondary)}
 ${PANEL} > nav + div > div + div {padding:0 20px 24px;scrollbar-gutter:stable}
 
 ${rowRules}
-/* Typography: body 14/20, captions 12/16, group headers 14/20 semibold. */
+/* Typography: Body 14/20, Caption 12/16, subtitle already on the heading. */
 ${PANEL} :is(.dsh-whale-title,.dsh-appearance-label),
 ${GENERAL} > div > div:first-child > div:first-child {font-size:14px;line-height:20px;font-weight:400}
-${PANEL} :is(.dsh-whale-description,.dsh-appearance-description) {font-size:12px;line-height:16px;margin-top:2px}
+${PANEL} :is(.dsh-whale-description,.dsh-appearance-description) {font-size:12px;line-height:16px;margin-top:2px;color:var(--whale-win-text-secondary)}
 ${PANEL} :is(.dsh-whale-text,.dsh-appearance-row > div:first-child) {min-width:0}
 ${PANEL} label[for] {font-size:14px;font-weight:400}
-${PANEL} .dsh-appearance-intro {margin:0 0 8px;font-size:12px;line-height:16px}
-${PANEL} .dsh-appearance-section {margin-top:20px}
+${PANEL} .dsh-appearance-intro {margin:0 0 8px;font-size:12px;line-height:16px;color:var(--whale-win-text-secondary)}
+${PANEL} .dsh-appearance-section {margin-top:24px}
 ${PANEL} .dsh-appearance-section > h3 {margin:0 4px 8px;font-size:14px;line-height:20px;font-weight:600}
 ${PANEL} .dsh-appearance-section > p {margin:0 4px 8px}
 ${PANEL} .dsh-appearance-section > .dsh-appearance-row:first-of-type,
 ${PANEL} .dsh-appearance-fonts > .dsh-appearance-row:first-child,
 ${PANEL} .dsh-appearance-background-settings > .dsh-appearance-row:first-child {margin-top:0}
-${PANEL} .dsh-appearance-cards {gap:12px;margin:20px 0 0}
-${PANEL} .dsh-appearance-card {padding:14px;border-radius:4px;background:transparent;border:1px solid var(--whale-win-hairline)}
+${PANEL} .dsh-appearance-cards {gap:12px;margin:24px 0 0}
+${PANEL} .dsh-appearance-card {padding:16px;border-radius:4px;background:transparent;border:1px solid var(--whale-win-surface-stroke)}
 ${PANEL} .dsh-appearance-card-heading {font-size:14px}
-${PANEL} .dsh-appearance-background-note {margin:12px 4px 0;font-size:12px;line-height:16px}
+${PANEL} .dsh-appearance-background-note {margin:12px 4px 0;font-size:12px;line-height:16px;color:var(--whale-win-text-secondary)}
 /* Inputs and selects take the WinUI control radius; hover/pressed/focus and
  * disabled states stay owned by the official primitives. */
 ${PANEL} :is(.dsh-appearance-input,.dsh-appearance-select-label select) {min-height:32px;border-radius:4px}
@@ -179,72 +239,84 @@ ${PANEL} .dsh-appearance-gradient {border-radius:4px}
 ${PANEL} .dsh-appearance-unavailable {border-radius:4px}
 
 /* ── WinUI ComboBox ───────────────────────────────────────────────────────
- * Windows 11 Settings approximates a ComboBox as: a subtly filled 4px field
- * with a thin stroke and a small chevron; opening shows an 8px popup whose
- * selected row carries a 3×16px accent bar. Hover and keyboard highlight only
- * tint the row — nothing lifts. The platform selects (fonts / presets /
- * scale) render this component on Windows; macOS keeps the original control. */
+ * ComboBox trigger: 32px, 4px radius, ControlFillColorDefault with the
+ * ControlElevationBorderBrush edge (default stroke + stronger bottom stroke),
+ * hover/press are the Secondary/Tertiary fills.  The dropdown is the Acrylic
+ * in-app surface (OverlayCornerRadius 8, SurfaceStrokeColorFlyout) and each
+ * ComboBoxItem is a 32px row with the official 3×16px accent pill on the
+ * selected entry; hover and selection share SubtleFillColorSecondary. */
 ${PANEL} .dsh-win-combo {position:relative;display:inline-flex;min-width:0}
 ${PANEL} .dsh-win-combo-trigger {
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
   justify-content:space-between;
-  gap:16px;
+  gap:12px;
   min-width:96px;
   max-width:280px;
-  height:32px;
-  padding:0 10px 0 12px;
-  border:1px solid var(--whale-win-field-stroke);
+  min-height:32px;
+  padding:0 8px 0 12px;
+  border:1px solid var(--whale-win-control-stroke);
+  border-bottom-color:var(--whale-win-control-stroke-bottom);
   border-radius:4px;
-  background:var(--whale-win-field-fill);
+  background:var(--whale-win-control-fill);
   color:var(--dsw-alias-label-primary);
   font:inherit;
   font-size:14px;
   line-height:20px;
   cursor:pointer;
-  transition:background-color 100ms ease,border-color 100ms ease;
+  transition:background-color 150ms cubic-bezier(.33,0,.67,1),border-color 150ms cubic-bezier(.33,0,.67,1);
 }
-${PANEL} .dsh-win-combo-trigger:hover {background:var(--whale-win-field-hover)}
-${PANEL} .dsh-win-combo-trigger:active {background:var(--whale-win-field-hover)}
+${PANEL} .dsh-win-combo-trigger:hover {background:var(--whale-win-control-fill-hover)}
+${PANEL} .dsh-win-combo-trigger:active {background:var(--whale-win-control-fill-pressed)}
 ${PANEL} .dsh-win-combo-trigger:focus-visible {
-  outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));
-  outline-offset:2px;
+  outline:2px solid var(--whale-win-focus-outer);
+  outline-offset:1px;
 }
-${PANEL} .dsh-win-combo-trigger:disabled {opacity:.4;cursor:default}
+${PANEL} .dsh-win-combo-trigger:disabled {
+  background:var(--whale-win-control-fill);
+  color:var(--whale-win-text-disabled);
+  cursor:default;
+}
 ${PANEL} .dsh-win-combo-value {min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-${PANEL} .dsh-win-combo-chevron {flex:none;color:var(--dsw-alias-label-secondary)}
+${PANEL} .dsh-win-combo-chevron {flex:none;color:var(--whale-win-text-secondary)}
 ${PANEL} .dsh-win-combo-popup {
   position:absolute;
   top:calc(100% + 4px);
   right:0;
   z-index:30;
   min-width:100%;
-  max-height:280px;
+  max-height:504px;
   overflow-y:auto;
   overscroll-behavior:contain;
   padding:4px;
-  border:1px solid var(--whale-win-hairline);
+  border:1px solid var(--whale-win-flyout-border);
   border-radius:8px;
-  background:var(--dsw-alias-bg-layer-2);
-  box-shadow:0 8px 24px #00000038,0 2px 6px #0000001f;
+  background:var(--whale-win-acrylic);
+  box-shadow:var(--whale-win-popup-shadow);
 }
 ${PANEL} .dsh-win-combo-option {
   position:relative;
   display:flex;
   align-items:center;
-  height:36px;
+  height:32px;
   padding:0 12px;
   border-radius:4px;
   color:var(--dsw-alias-label-primary);
   font-size:14px;
   line-height:20px;
+  font-weight:400;
   white-space:nowrap;
   cursor:pointer;
+  transition:background-color 150ms cubic-bezier(.33,0,.67,1);
 }
 ${PANEL} .dsh-win-combo-option:hover,
-${PANEL} .dsh-win-combo-option[data-active] {background:color-mix(in srgb,var(--dsw-alias-label-primary) 5%,transparent)}
-${PANEL} .dsh-win-combo-option[aria-selected="true"] {padding-left:21px;font-weight:600}
+${PANEL} .dsh-win-combo-option[data-active] {background:var(--whale-win-subtle-secondary)}
+${PANEL} .dsh-win-combo-option:active {
+  background:var(--whale-win-subtle-tertiary);
+  color:var(--whale-win-text-secondary);
+}
+${PANEL} .dsh-win-combo-option[aria-selected="true"] {background:var(--whale-win-subtle-secondary);padding-left:21px}
 ${PANEL} .dsh-win-combo-option[aria-selected="true"]::before {
   content:"";
   position:absolute;
@@ -253,15 +325,16 @@ ${PANEL} .dsh-win-combo-option[aria-selected="true"]::before {
   width:3px;
   height:16px;
   margin-top:-8px;
-  border-radius:2px;
+  border-radius:999px;
   background:var(--dsw-alias-brand-primary);
 }
 
 /* ── Selection controls ───────────────────────────────────────────────────
- * Windows marks a choice with a round radio, never a raised white chip. The
- * official segmented control keeps its tab semantics and keyboard behavior;
- * only the skin changes: the sliding white indicator is hidden and each tab
- * paints a WinUI radio circle (20px ring, 10px accent dot when selected). */
+ * WinUI marks a single choice with a radio circle (RadioButton): a 20px ring
+ * using ControlStrongStroke, filled with a 2px accent ring plus a 10px accent
+ * dot when checked. The host segmented control keeps its tab semantics and
+ * keyboard behavior; the sliding white indicator is hidden and each tab
+ * paints the radio. Round color wells follow the same language. */
 ${PANEL} .dsh-appearance-color-input input[type=color] {border-radius:50%}
 ${PANEL} [role="tablist"] {
   position:static;
@@ -296,25 +369,27 @@ ${PANEL} [role="tab"]::before {
   height:20px;
   border-radius:50%;
   corner-shape:round;
-  border:1px solid var(--whale-win-stroke);
+  border:1px solid var(--whale-win-strong-stroke);
   background:transparent;
-  transition:border-color 100ms ease,background-color 100ms ease;
+  transition:border-color 150ms cubic-bezier(.33,0,.67,1),background-color 150ms cubic-bezier(.33,0,.67,1);
 }
 ${PANEL} [role="tab"]:hover::before {border-color:var(--dsw-alias-label-primary)}
 ${PANEL} [role="tab"][aria-selected="true"]::before {
   border:2px solid var(--dsw-alias-brand-primary);
   background:radial-gradient(circle at center,var(--dsw-alias-brand-primary) 0 5px,transparent 5px);
 }
-${PANEL} [role="tab"]:disabled {cursor:default;opacity:.4}
+${PANEL} [role="tab"]:disabled {cursor:default;color:var(--whale-win-text-disabled)}
+${PANEL} [role="tab"]:disabled::before {border-color:var(--whale-win-strong-stroke-disabled)}
 ${PANEL} [role="tab"]:focus-visible {
-  outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));
+  outline:2px solid var(--whale-win-focus-outer);
   outline-offset:2px;
 }
 
 /* ── ToggleSwitch ─────────────────────────────────────────────────────────
- * WinUI geometry: 40×20 track, 12px round thumb, 4px inset and a 20px travel.
- * Off state is a stroked empty track; on state fills with the theme accent.
- * The thumb uses the theme's on-accent label, so all presets stay readable. */
+ * FluentKit / WinUI geometry: 40×20 track, 1px ControlStrongStroke border,
+ * 12px thumb at a 4px inset that stretches to 14 (hover) and 17 (pressed),
+ * 20px travel.  Off uses ControlAltFillColor alphas; on fills the theme
+ * accent with the theme's on-accent label as the thumb. */
 ${PANEL} [role="switch"] {
   box-sizing:border-box;
   position:relative;
@@ -324,44 +399,63 @@ ${PANEL} [role="switch"] {
   min-width:40px;
   height:20px;
   min-height:20px;
-  padding:4px;
+  padding:0;
   border:0;
   border-radius:999px;
   corner-shape:round;
-  background:transparent;
-  box-shadow:inset 0 0 0 1px var(--whale-win-stroke);
+  background:var(--whale-win-alt-off);
+  box-shadow:inset 0 0 0 1px var(--whale-win-strong-stroke);
   cursor:pointer;
-  transition:background-color 140ms ease,box-shadow 140ms ease;
+  transition:background-color 150ms cubic-bezier(.33,0,.67,1),box-shadow 150ms cubic-bezier(.33,0,.67,1);
 }
 ${PANEL} [role="switch"]::before {content:"";position:absolute;inset:-8px 0;border-radius:999px}
 ${PANEL} [role="switch"] > span {
   position:absolute;
   display:block;
-  top:4px;
+  top:50%;
   left:4px;
   width:12px;
   height:12px;
   margin:0;
   border:0;
-  border-radius:50%;
+  border-radius:999px;
   corner-shape:round;
-  background:var(--whale-win-stroke);
-  transform:translateX(0);
+  background:var(--dsw-alias-label-primary);
+  transform:translateY(-50%);
   pointer-events:none;
-  transition:transform 160ms cubic-bezier(.2,.8,.2,1),background-color 140ms ease;
+  transition:transform 150ms cubic-bezier(.33,0,.67,1),width 150ms cubic-bezier(.33,0,.67,1),height 150ms cubic-bezier(.33,0,.67,1),background-color 150ms cubic-bezier(.33,0,.67,1);
 }
+${PANEL} [role="switch"]:hover:not(:disabled) {background:var(--whale-win-alt-off-hover)}
+${PANEL} [role="switch"]:hover:not(:disabled) > span {width:14px;height:14px}
+${PANEL} [role="switch"]:active:not(:disabled) {background:var(--whale-win-alt-off-pressed)}
+${PANEL} [role="switch"]:active:not(:disabled) > span {width:17px;height:14px}
 ${PANEL} [role="switch"][aria-checked="true"] {
   background:var(--dsw-alias-brand-primary);
-  box-shadow:inset 0 0 0 1px transparent;
+  box-shadow:none;
+}
+${PANEL} [role="switch"][aria-checked="true"]:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--dsw-alias-brand-primary) 90%,transparent);
+}
+${PANEL} [role="switch"][aria-checked="true"]:active:not(:disabled) {
+  background:color-mix(in srgb,var(--dsw-alias-brand-primary) 80%,transparent);
 }
 ${PANEL} [role="switch"][aria-checked="true"] > span {
-  transform:translateX(20px);
+  transform:translateY(-50%) translateX(20px);
   background:var(--dsw-alias-label-primary-foreground);
 }
-${PANEL} [role="switch"]:active:not(:disabled) > span {box-shadow:0 0 0 2px #ffffff30}
-${PANEL} [role="switch"]:disabled {cursor:default;opacity:.4}
+${PANEL} [role="switch"]:disabled {
+  cursor:default;
+  background:transparent;
+  box-shadow:inset 0 0 0 1px var(--whale-win-strong-stroke-disabled);
+}
+${PANEL} [role="switch"]:disabled > span {background:var(--whale-win-text-disabled)}
+${PANEL} [role="switch"][aria-checked="true"]:disabled {
+  background:var(--whale-win-accent-disabled);
+  box-shadow:none;
+}
+${PANEL} [role="switch"][aria-checked="true"]:disabled > span {background:var(--whale-win-text-disabled)}
 ${PANEL} :is(nav button,[role="switch"]):focus-visible {
-  outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));
+  outline:2px solid var(--whale-win-focus-outer);
   outline-offset:2px;
 }
 
@@ -378,16 +472,23 @@ ${REDUCED} {background:var(--dsw-alias-bg-base)}
 }
 @media (prefers-contrast:more) {
   ${PANEL} {
-    --whale-win-hairline:var(--dsw-alias-border-l4);
-    --whale-win-stroke:var(--dsw-alias-label-secondary);
+    --whale-win-divider:rgba(0,0,0,.4);
+    --whale-win-surface-stroke:rgba(0,0,0,.4);
+    --whale-win-strong-stroke:rgba(0,0,0,.7);
+  }
+  ${DARK} {
+    --whale-win-divider:rgba(255,255,255,.4);
+    --whale-win-surface-stroke:rgba(255,255,255,.4);
+    --whale-win-strong-stroke:rgba(255,255,255,.8);
   }
 }
 @media (forced-colors:active) {
   ${PANEL} {border-color:WindowText}
-  ${PANEL} [role="switch"] {background:ButtonFace;box-shadow:none;outline:1px solid ButtonText;forced-color-adjust:none}
+  ${PANEL} [role="switch"] {background:ButtonFace;outline:1px solid ButtonText;forced-color-adjust:none}
   ${PANEL} [role="switch"][aria-checked="true"] {background:Highlight}
   ${PANEL} [role="switch"] > span {background:ButtonText}
   ${PANEL} [role="switch"][aria-checked="true"] > span {background:HighlightText}
+  ${PANEL} .dsh-win-combo-trigger {border-color:ButtonText;background:ButtonFace;color:ButtonText}
 }
 @media (max-width:700px) {
   ${PANEL} > nav {width:168px}
@@ -395,10 +496,10 @@ ${REDUCED} {background:var(--dsw-alias-bg-base)}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {gap:12px;flex-wrap:wrap}
 }
 @media (max-width:480px) {
-  ${PANEL} {max-width:calc(100vw - 24px);height:calc(100dvh - 24px);border-radius:8px}
+  ${PANEL} {max-width:calc(100vw - 24px);height:calc(100dvh - 24px)}
   ${PANEL} > nav {width:120px;padding:16px 6px 10px}
-  ${PANEL} nav button {padding:0 6px 0 10px;gap:6px}
-  ${PANEL} nav button[aria-current="true"]::before {left:2px}
+  ${PANEL} nav button {padding:0 6px;gap:6px}
+  ${PANEL} nav button[aria-current="true"]::before {left:0}
   ${PANEL} > nav + div > div + div {padding:0 10px 16px}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {padding:10px;gap:8px}
   ${PANEL} .dsh-appearance-row:has([role="switch"]) {flex-wrap:nowrap}
