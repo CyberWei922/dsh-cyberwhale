@@ -15,6 +15,7 @@
 </p>
 
 <p align="center">
+  <a href="#界面预览">界面预览</a> ·
   <a href="#为什么需要-cyberwhale">为什么需要它</a> ·
   <a href="#能做什么">功能介绍</a> ·
   <a href="#快速上手">快速上手</a> ·
@@ -23,6 +24,31 @@
 </p>
 
 ---
+
+## 界面预览
+
+同一套功能，两种熟悉的系统风格。下面是 macOS 与 Windows 上的实机截图，点击图片可查看大图。
+
+<table>
+  <tr>
+    <th width="50%">🍎 macOS · 系统设置风格</th>
+    <th width="50%">🪟 Windows · WinUI 3 风格</th>
+  </tr>
+  <tr>
+    <td valign="top">
+      <a href="docs/images/settings-macos.png"><img src="docs/images/settings-macos.png" alt="macOS 实机主题设置截图：磨砂侧栏、蓝色选中项、圆角分组与浅深色主题预览" width="100%"></a>
+    </td>
+    <td valign="top">
+      <a href="docs/images/settings-windows.png"><img src="docs/images/settings-windows.png" alt="Windows 实机主题设置截图：导航强调色指示条、WinUI 3 风格设置卡片与浅深色主题预览" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">磨砂侧栏、圆角分组、小型开关</td>
+    <td align="center">导航指示条、设置卡片、小圆角控件</td>
+  </tr>
+</table>
+
+喜欢这种外观？[几步安装并启用](#快速上手)，再搭配自己的主题、壁纸和字体。
 
 ## 为什么需要 CyberWhale？
 
