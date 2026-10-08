@@ -45,9 +45,16 @@ const transparent = 'rgba(0, 0, 0, 0)';
 const pixel = (png, x, y) => [...png.data.subarray((y * png.width + x) * 4, (y * png.width + x) * 4 + 4)];
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const platform of ['darwin', 'win32']) for (const scheme of ['light', 'dark']) {
+  for (const systemReduced of [false, true]) for (const platform of ['darwin', 'win32']) for (const scheme of ['light', 'dark']) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
     const errors = []; page.on('pageerror', e => errors.push(e.message));
+    // Exercise both OS preferences explicitly, independent of the machine that
+    // runs the test. This drives real matchMedia and CSS media query behavior.
+    const cdp = await page.context().newCDPSession(page);
+    const setSystemReduced = value => cdp.send('Emulation.setEmulatedMedia', { features: [
+      { name: 'prefers-reduced-transparency', value: value ? 'reduce' : 'no-preference' },
+    ] });
+    await setSystemReduced(systemReduced);
     await page.setContent(`<html data-platform="${platform}" ${platform === 'win32' ? 'data-windows-titlebar' : ''}><head><style>${fixtureCSS}${appearanceCSS.CSS}</style></head><body ${scheme === 'dark' ? 'data-ds-dark-theme' : ''}><div data-slot="root">${frameHTML}</div></body></html>`);
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     await page.evaluate(({ config, scheme, image }) => {
@@ -114,9 +121,18 @@ try {
     const original = await inspect();
     assert.deepEqual(original.box, { x: 0, y: 0, width: 1280, height: 800 });
     assert.equal(original.position, 'fixed'); assert.equal(original.z, '-1');
-    assert.equal(original.sidebarRoot, transparent); assert.equal(original.main, transparent); assert.equal(original.conversation, transparent); assert.equal(original.flow, transparent);
+    assert.equal(original.sidebarRoot, transparent, 'sidebar content inherits its opaque or translucent column surface');
+    assert.equal(original.main, transparent); assert.equal(original.conversation, transparent); assert.equal(original.flow, transparent);
     assert.equal(original.filter, 'none', 'the sidebar column must not move fixed titlebar buttons');
-    assert.match(original.frost, /blur\(28px\)/, 'the independent material layer retains the sidebar frost');
+    if (systemReduced) {
+      assert.equal(original.frost, 'none', 'the OS preference disables sidebar frost without hiding the wallpaper');
+      assert.equal(await page.locator('.side').evaluate(el => getComputedStyle(el).backgroundColor), `rgb(${model.rgb(model.DEFAULTS[scheme].background).join(', ')})`);
+    } else assert.match(original.frost, /blur\(28px\)/, 'the independent material layer retains the sidebar frost');
+    if (platform === 'win32') {
+      assert.equal(await page.locator('[data-slot="sidebar"]').evaluate(el => getComputedStyle(el).getPropertyValue('--dsw-specific-sidebar-fill').trim()), systemReduced ? model.DEFAULTS[scheme].background : 'transparent', 'the sidebar footer fade matches its column surface');
+      assert.equal(await page.evaluate(() => document.body.style.getPropertyValue('--dsw-specific-sidebar-fill')), systemReduced ? '' : 'transparent', 'native titlebar follows the material preference');
+      assert.equal(await page.locator('.frame').evaluate(el => getComputedStyle(el, '::before').backdropFilter), systemReduced ? 'none' : 'blur(28px) saturate(1.4)');
+    }
     assert.equal(original.code, 'rgb(67, 69, 74)'); assert.equal(original.composer, 'rgb(215, 217, 224)');
     assert.equal(original.button, 'rgb(129, 140, 159)');
     assert.equal(original.editorLayers, 0); assert.equal(original.overlays, 0);
@@ -130,7 +146,8 @@ try {
     await page.addStyleTag({ content: '[data-whale-wallpaper-frame] > .side::before {backdrop-filter:none;-webkit-backdrop-filter:none}' });
     const sharp = decodePng(await page.screenshot());
     const sharpDelta = distance(pixel(sharp, 140, 400), pixel(sharp, 154, 400));
-    assert(sharpDelta >= 100, 'the sidebar probe must distinguish actual blur from tint alone');
+    if (systemReduced) assert(sharpDelta <= 6, 'the opaque sidebar must not reveal wallpaper when the system reduces transparency');
+    else assert(sharpDelta >= 100, 'the sidebar probe must distinguish actual blur from tint alone');
     await page.evaluate(() => document.head.lastElementChild.remove());
     await page.locator('.dsh-whale-wallpaper').evaluate((el, style) => el.setAttribute('style', style), wallpaperStyle);
     const before = decodePng(await page.screenshot());
@@ -165,11 +182,26 @@ try {
     assert.equal(await page.evaluate(() => window.revokedImages.length), 1, 'removing an image releases its URL');
     await page.evaluate(() => window.whale.edit({ wallpaper: { id: 'a'.repeat(64), name: 'fixture.png' } }));
     await page.waitForSelector('.dsh-whale-wallpaper');
+    await page.waitForFunction(() => !window.whale.getState().busy);
+    await page.evaluate(() => window.whale.edit({ glassInput: true }));
+    await page.waitForFunction(() => !window.whale.getState().busy);
+    for (const reduced of [!systemReduced, systemReduced]) {
+      await setSystemReduced(reduced);
+      await page.waitForFunction(reduced => document.body.hasAttribute('data-whale-settings-reduced') === reduced &&
+        document.body.hasAttribute('data-whale-glass-input') === !reduced, reduced);
+      assert.equal(await page.locator('.dsh-whale-wallpaper').count(), 1, 'changing the OS transparency preference retains the selected wallpaper');
+      assert.equal(await page.locator('.side').evaluate(el => getComputedStyle(el, '::before').backdropFilter), reduced ? 'none' : 'blur(28px) saturate(1.4)');
+    }
+    await page.evaluate(() => window.whale.edit({ enabled: false }));
+    await page.waitForFunction(() => !window.whale.getState().busy);
+    assert.equal(await page.locator('.dsh-whale-wallpaper').count(), 0, 'the plugin appearance switch still hides backgrounds');
+    await page.evaluate(() => window.whale.edit({ enabled: true }));
+    await page.waitForSelector('.dsh-whale-wallpaper');
     await page.evaluate(() => window.whale.dispose());
     assert.equal(await page.locator('.dsh-whale-wallpaper').count(), 0); assert.equal(await page.locator('[data-whale-wallpaper-frame]').count(), 0);
     assert.equal(await page.evaluate(() => window.revokedImages.length), 2, 'unload releases the replacement image');
     assert.deepEqual(errors, []);
     await page.close();
-    console.log(`${platform}/${scheme}：三种渐变实际绘制、全窗图片、侧栏磨砂、收放不缩放、输入/点击、空图片模式、减少透明与卸载检查通过。`);
+    console.log(`${platform}/${scheme}/系统减少透明=${systemReduced}：三种渐变实际绘制、全窗图片、材料回退、系统偏好实时切换、收放不缩放、输入/点击、空图片模式、外观开关、减少透明与卸载检查通过。`);
   }
 } finally { await browser.close(); }

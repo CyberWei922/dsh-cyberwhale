@@ -36,7 +36,7 @@ function PlatformSelect(props) {
   }, (props.options ?? []).map((option) => h('option', { key: option.value, value: option.value }, option.label)));
 }
 
-function PlatformScaleChoice(props) {
+function PlatformSegmentedChoice(props) {
   if (windowsClient()) {
     return h(WinComboBox, {
       id: props.id, label: props.label, value: props.value, disabled: props.disabled,
@@ -46,4 +46,4 @@ function PlatformScaleChoice(props) {
   return h(SegmentedControl, props);
 }
 
-module.exports = { PlatformSelect, PlatformScaleChoice };
+module.exports = { PlatformSelect, PlatformSegmentedChoice, PlatformScaleChoice: PlatformSegmentedChoice };

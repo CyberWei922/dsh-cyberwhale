@@ -142,8 +142,9 @@ try {
 {
   const stripped = APPEARANCE_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
   const tokenRules = stripped.split('}').filter(rule => rule.includes('--dsw-specific-sidebar-fill'));
-  assert.equal(tokenRules.length, 1, '官方侧栏底色只在一处、且是我们已知的 Windows 规则里被改写');
+  assert.equal(tokenRules.length, 2, 'Windows 侧栏只在透明背景和系统实色回退规则中改写底色');
   assert.match(tokenRules[0].trim(), /^html\[data-windows-titlebar\] \[data-whale-wallpaper-frame\] \[data-slot="sidebar"\]\s*\{--dsw-specific-sidebar-fill:transparent$/, 'Windows 侧栏子树把该 token 归零；darwin 与主内容区不在作用域内');
+  assert.match(tokenRules[1].trim(), /^html\[data-windows-titlebar\] \[data-whale-wallpaper-frame\] \[data-slot="sidebar"\]\s*\{--dsw-specific-sidebar-fill:var\(--dsw-alias-bg-base\)$/, '系统减少透明时 Windows 侧栏渐隐条匹配实色背景');
   assert.ok(!/data-platform=darwin/.test(tokenRules[0]), 'macOS 行为不受影响');
   console.log('✓ Windows 侧栏渐隐条留白修复只作用于 Windows + 主题生效时的侧栏子树');
 

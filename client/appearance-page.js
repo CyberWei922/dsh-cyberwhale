@@ -4,7 +4,7 @@ const { Button, DisclosureRow, IconChevronDownOutlineRegular, Switch, SegmentedC
 const { PRESETS, GRADIENTS, normalizeAppearance, palette, contrast } = require('../lib/appearance-model.cjs');
 const { readImage, colorFromImage } = require('./appearance-image.mjs');
 const { FontSettings } = require('./appearance-fonts.js');
-const { PlatformSelect } = require('./platform-choice.js');
+const { PlatformSelect, PlatformSegmentedChoice } = require('./platform-choice.js');
 const h = React.createElement;
 function useAppearance(controller) {
   const [snapshot, setSnapshot] = React.useState(() => controller.getState());
@@ -114,8 +114,10 @@ function AppearancePage({ controller }) {
   return h('div', { className: 'dsh-appearance-page' },
     h('p', { className: 'dsh-appearance-intro' }, '选择喜欢的配色，修改后立即生效并自动保存。'),
     !available && h('p', { role: 'alert', className: 'dsh-appearance-error' }, '当前 Harness 未提供主题接口，请使用 0.2.0-rc.2 或更新版本。'),
-    toggle('enabled', '启用外观美化', '配色、字体、背景与特效一起生效，桌宠独立控制。'),
-    row('mode', '外观模式', '使用 Harness 的模式设置，立即保存。', h(SegmentedControl, { id: 'dsh-whale-mode', label: '外观模式', value: theme?.preference ?? 'system', disabled, options: [{ value: 'light', label: '浅色' }, { value: 'dark', label: '深色' }, { value: 'system', label: '跟随系统' }], onChange: v => void controller.setMode(v) })),
+    h('div', { className: 'dsh-appearance-general-group' },
+      toggle('enabled', '启用外观美化', '配色、字体、背景与特效一起生效，桌宠独立控制。'),
+      row('mode', '外观模式', '使用 Harness 的模式设置，立即保存。', h(PlatformSegmentedChoice, { id: 'dsh-whale-mode', label: '外观模式', value: theme?.preference ?? 'system', disabled, options: [{ value: 'light', label: '浅色' }, { value: 'dark', label: '深色' }, { value: 'system', label: '跟随系统' }], onChange: v => void controller.setMode(v) }))),
+    h('h3', { className: 'dsh-appearance-palette-heading' }, '配色'),
     h('div', { className: 'dsh-appearance-cards' }, h(ThemeCard, { scheme: 'light', config, edit, disabled }), h(ThemeCard, { scheme: 'dark', config, edit, disabled })),
     section('字体', null, [
       h(FontSettings, { key: 'fonts', config, edit, disabled }),

@@ -73,7 +73,7 @@ body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-
 
 以微软官方 WinUI 3 Gallery 的 NavigationView、ToggleSwitch、Button、ComboBox、TextBox 等控件为参照。Gallery 提供实际交互示例，可用于比对浅深主题和各状态。[微软 NavigationView 文档](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/navigationview)
 
-1. **导航和层次**：保留左导航、右内容的结构。建议用柔和的中性色背景标示选中项，并以主题强调色绘制短竖条；悬停与按下分别有轻微变化。内容使用清晰的页面标题和分组；设置行保持平铺列表（细分隔线），悬停只加极淡的中性底色，不做卡片白底或浮起效果，避免文字或控件与导航混为一体。这是本项目建议的视觉方向，具体间距以 Gallery 和页面内容调整。
+1. **导航和层次**：保留左导航、右内容的结构。用柔和的中性色背景标示选中项，以主题强调色绘制短竖条；悬停与按下分别有轻微变化。主题页按 2026-10-08 用户确认的 Windows 设置方向采用带细边框的分组表面和 8px 主题卡片；设置行本身保留细分隔线和轻微悬停反馈。其他设置页继续使用已有的平铺行。页面标题、分组和控件保持清晰层次，具体间距以 Gallery 和页面内容调整。
 2. **字体**：系统默认模式参考 Segoe UI Variable，回退 Segoe UI 与中文系统字体；用户已选择的自定义字体继续生效。正文可参考 14/20、说明 12/16、分区标题 20/28 的字号和行高，标题使用 600 字重。采用 CSS 逻辑像素，不手动乘 Windows 缩放比例。[微软字体规范](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography)
 3. **圆角和边界**：普通按钮、输入框和导航背景参考 4px 圆角，设置弹窗参考 8px；保留相接区域的直边。卡片圆角与间距可按视觉层级调整。边界细而清晰，阴影克制。[微软几何规范](https://learn.microsoft.com/en-us/windows/apps/design/style/rounded-corner)
 4. **开关**：参考 WinUI ToggleSwitch 的圆形滑块、关闭态边框和开启态强调色；维持现有修改后立即生效的行为。保留可访问名称、`aria-checked`、禁用态和键盘操作，状态不能只靠颜色区分。具体尺寸和滑块行程以 Gallery 比对，扩大点击范围时避免覆盖相邻控件。[微软开关规范](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/toggles)
@@ -95,6 +95,12 @@ npm test
 npm run verify:mac-settings-anchors
 npm run verify:mac-settings-render
 ```
+
+Windows 下拉框的交互检查单独运行 `npm run test:win-combobox`。它从已安装的 Harness 提取 React、官方基元与设置 CSS，在隔离浏览器中挂载实际插件组件，不连接或操作正在运行的应用。通过 `DSH_TEST_BROWSER_MODULE` 指定 Playwright 模块，通过 `DSH_TEST_ASAR` 指定安装包，`DSH_TEST_OUTPUT` 可指定报告和截图目录；可选的 `DSH_TEST_BASELINE_ROOT` 用于重现备份版本的裁剪问题。输出 `report.json`、浅深色与窄窗口截图，并检查滚轮、最后一项、键盘、焦点、关闭、缩放、禁用和旧浏览器回退。
+
+Windows ComboBox 使用 `popover="manual"` 和 `showPopover()` 进入浏览器 top layer，从而越过祖先卡片的 `overflow:hidden`，仍保持原有 DOM 祖先与平台样式作用域。仅调高 `z-index` 无法解决祖先裁剪。菜单以设置面板和窗口的可见边界为限，自动向上或向下展开，默认显示六个完整选项，窗口不足时缩减完整行数；滚轮不会带动后方页面，键盘高亮只滚动列表内部。不支持 Popover API 的客户端回退为系统 `<select>`。[Popover API 文档](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API/Using)
+
+隔离检查不替代真实窗口验收。重新加载已构建的客户端后，还需在 Harness 中确认滚轮能到达最后一个主题并完成选择。macOS 样式文件保持原样；在 Windows 无界面浏览器上出现的 macOS 材质像素失败，应对照未修改基线后单独记录，不能当作真实 Mac 验收结论。
 
 渲染检查需要可用的 Playwright 模块和 Harness 安装包，可通过 `DSH_TEST_BROWSER_MODULE`、`DSH_TEST_ASAR` 指定路径。官方锚点检查可使用 `DSH_APP_ASAR`；没有安装包时会跳过该项。刷新或重启 Harness 后加载新的 `lib/client.js`，不要直接手改构建产物。
 

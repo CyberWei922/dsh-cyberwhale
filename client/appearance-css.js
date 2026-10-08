@@ -7,6 +7,8 @@ const CSS = `
 .dsh-appearance-label {font-size:14px;line-height:20px}
 .dsh-appearance-description {font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);margin:4px 0 0}
 .dsh-appearance-control {flex-shrink:0;display:flex;align-items:center}
+.dsh-appearance-general-group {display:contents}
+.dsh-appearance-palette-heading {display:none}
 .dsh-appearance-cards {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0 8px}
 .dsh-appearance-card {border:1px solid var(--dsw-alias-border-l2);border-radius:14px;padding:16px;overflow:hidden}
 .dsh-appearance-card-heading {display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;margin-bottom:14px}
@@ -88,6 +90,14 @@ html[data-windows-titlebar] [data-whale-wallpaper-frame] [data-slot="sidebar"] {
 body[data-whale-glass-input] [data-composer-card] {background:color-mix(in srgb,var(--dsw-alias-bg-base) 84%,transparent);backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);border:1px solid color-mix(in srgb,var(--dsw-alias-label-primary) 13%,transparent);box-shadow:inset 0 1px 0 #ffffff2e,0 10px 32px #00000014;--dsw-alias-label-primary:var(--whale-glass-text)}
 @supports not (backdrop-filter:blur(1px)) {body[data-whale-glass-input] [data-composer-card] {background:var(--dsw-specific-input-major)}}
 @media (prefers-reduced-transparency:reduce) {body[data-whale-glass-input] [data-composer-card] {background:var(--dsw-specific-input-major);backdrop-filter:none}}
+/* Keep explicitly selected wallpapers while respecting the system's opaque
+   sidebar/titlebar preference. Reducing material effects must not hide images. */
+@media (prefers-reduced-transparency:reduce) {
+  [data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"]),
+  html[data-windows-titlebar] [data-whale-wallpaper-frame]::before {background:var(--dsw-alias-bg-base) !important;backdrop-filter:none;-webkit-backdrop-filter:none}
+  [data-whale-wallpaper-frame] > :has(> [data-slot="sidebar"])::before {backdrop-filter:none;-webkit-backdrop-filter:none}
+  html[data-windows-titlebar] [data-whale-wallpaper-frame] [data-slot="sidebar"] {--dsw-specific-sidebar-fill:var(--dsw-alias-bg-base)}
+}
 @media (max-width:700px) {.dsh-appearance-cards {grid-template-columns:1fr}.dsh-appearance-row {gap:12px;flex-wrap:wrap}.dsh-appearance-input {width:155px}}
 `;
 module.exports = { CSS };

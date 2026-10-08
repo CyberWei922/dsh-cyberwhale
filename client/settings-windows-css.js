@@ -82,6 +82,7 @@ ${PANEL} {
   --whale-win-strong-stroke-disabled:rgba(0,0,0,.2169);
   --whale-win-accent-disabled:rgba(0,0,0,.2157);
   --whale-win-layer:rgba(255,255,255,.5);
+  --whale-win-card:rgba(255,255,255,.7);
   --whale-win-acrylic:#fafafa;
   --whale-win-flyout-border:rgba(0,0,0,.0578);
   --whale-win-surface-stroke:rgba(0,0,0,.0578);
@@ -92,7 +93,7 @@ ${PANEL} {
   /* Mica approximation: CSS cannot sample the desktop, so the panel keeps a
    * flat themed base with a whisper of the theme accent (documented deviation). */
   --whale-win-mica:color-mix(in srgb,var(--dsw-alias-brand-primary) 3%,var(--dsw-alias-bg-base));
-  width:860px;
+  width:960px;
   max-width:calc(100vw - 48px);
   height:min(700px,calc(100dvh - 48px));
   border:1px solid var(--whale-win-surface-stroke);
@@ -125,6 +126,7 @@ ${DARK} {
   --whale-win-strong-stroke-disabled:rgba(255,255,255,.1581);
   --whale-win-accent-disabled:rgba(255,255,255,.1569);
   --whale-win-layer:rgba(255,255,255,.0538);
+  --whale-win-card:rgba(255,255,255,.0538);
   --whale-win-acrylic:#2c2c2c;
   --whale-win-flyout-border:rgba(0,0,0,.2);
   --whale-win-surface-stroke:rgba(255,255,255,.0578);
@@ -228,8 +230,30 @@ ${PANEL} .dsh-appearance-section > .dsh-appearance-row:first-of-type,
 ${PANEL} .dsh-appearance-fonts > .dsh-appearance-row:first-child,
 ${PANEL} .dsh-appearance-background-settings > .dsh-appearance-row:first-child {margin-top:0}
 ${PANEL} .dsh-appearance-cards {gap:12px;margin:24px 0 0}
-${PANEL} .dsh-appearance-card {padding:16px;border-radius:4px;background:transparent;border:1px solid var(--whale-win-surface-stroke)}
+/* The approved theme page groups preferences like Windows Settings. Other
+ * settings pages retain their existing flat-row structure. */
+${PANEL} .dsh-appearance-general-group {
+  display:block;
+  margin-top:12px;
+  border:1px solid var(--whale-win-surface-stroke);
+  border-radius:8px;
+  background:var(--whale-win-card);
+  overflow:hidden;
+}
+${PANEL} .dsh-appearance-palette-heading {display:block;margin:24px 0 12px;font-size:14px;line-height:20px;font-weight:600}
+${PANEL} .dsh-appearance-palette-heading + .dsh-appearance-cards {margin-top:0}
+${PANEL} .dsh-appearance-card {padding:16px;border-radius:8px;background:var(--whale-win-card);border:1px solid var(--whale-win-surface-stroke)}
 ${PANEL} .dsh-appearance-card-heading {font-size:14px}
+${PANEL} .dsh-appearance-mini {height:140px;border-radius:4px}
+${PANEL} .dsh-appearance-select-label .dsh-win-combo {width:100%}
+${PANEL} .dsh-appearance-select-label .dsh-win-combo-trigger {max-width:none}
+${PANEL} .dsh-appearance-control > .dsh-win-combo {width:220px;max-width:100%}
+${PANEL} .dsh-appearance-font-control .dsh-win-combo {width:240px;max-width:100%}
+${PANEL} .dsh-appearance-section > :is(.dsh-appearance-fonts,.dsh-appearance-background-settings) {
+  border:1px solid var(--whale-win-surface-stroke);
+  border-radius:8px;
+  background:var(--whale-win-card);
+}
 ${PANEL} .dsh-appearance-background-note {margin:12px 4px 0;font-size:12px;line-height:16px;color:var(--whale-win-text-secondary)}
 /* Inputs and selects take the WinUI control radius; hover/pressed/focus and
  * disabled states stay owned by the official primitives. */
@@ -243,7 +267,7 @@ ${PANEL} .dsh-appearance-unavailable {border-radius:4px}
  * ControlElevationBorderBrush edge (default stroke + stronger bottom stroke),
  * hover/press are the Secondary/Tertiary fills.  The dropdown is the Acrylic
  * in-app surface (OverlayCornerRadius 8, SurfaceStrokeColorFlyout) and each
- * ComboBoxItem is a 32px row with the official 3×16px accent pill on the
+ * ComboBoxItem is a 36px row with the official 3×16px accent pill on the
  * selected entry; hover and selection share SubtleFillColorSecondary. */
 ${PANEL} .dsh-win-combo {position:relative;display:inline-flex;min-width:0}
 ${PANEL} .dsh-win-combo-trigger {
@@ -253,6 +277,7 @@ ${PANEL} .dsh-win-combo-trigger {
   justify-content:space-between;
   gap:12px;
   min-width:96px;
+  width:100%;
   max-width:280px;
   min-height:32px;
   padding:0 8px 0 12px;
@@ -281,32 +306,42 @@ ${PANEL} .dsh-win-combo-trigger:disabled {
 ${PANEL} .dsh-win-combo-value {min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 ${PANEL} .dsh-win-combo-chevron {flex:none;color:var(--whale-win-text-secondary)}
 ${PANEL} .dsh-win-combo-popup {
-  position:absolute;
-  top:calc(100% + 4px);
-  right:0;
+  box-sizing:border-box;
+  position:fixed;
+  inset:auto;
+  margin:0;
   z-index:30;
-  min-width:100%;
-  max-height:504px;
+  min-width:0;
+  max-height:226px;
   overflow-y:auto;
+  overflow-x:hidden;
   overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scrollbar-width:auto;
   padding:4px;
   border:1px solid var(--whale-win-flyout-border);
   border-radius:8px;
   background:var(--whale-win-acrylic);
   box-shadow:var(--whale-win-popup-shadow);
 }
+${PANEL} .dsh-win-combo-popup::backdrop {background:transparent;pointer-events:none}
+${PANEL} .dsh-win-combo-popup::-webkit-scrollbar {display:block;width:10px}
+${PANEL} .dsh-win-combo-popup::-webkit-scrollbar-track {background:transparent}
+${PANEL} .dsh-win-combo-popup::-webkit-scrollbar-thumb {border:3px solid var(--whale-win-acrylic);border-radius:999px;background:var(--whale-win-strong-stroke);background-clip:padding-box}
 ${PANEL} .dsh-win-combo-option {
   position:relative;
-  display:flex;
-  align-items:center;
-  height:32px;
+  box-sizing:border-box;
+  display:block;
+  height:36px;
   padding:0 12px;
   border-radius:4px;
   color:var(--dsw-alias-label-primary);
   font-size:14px;
-  line-height:20px;
+  line-height:36px;
   font-weight:400;
   white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
   cursor:pointer;
   transition:background-color 150ms cubic-bezier(.33,0,.67,1);
 }
@@ -336,6 +371,7 @@ ${PANEL} .dsh-win-combo-option[aria-selected="true"]::before {
  * keyboard behavior; the sliding white indicator is hidden and each tab
  * paints the radio. Round color wells follow the same language. */
 ${PANEL} .dsh-appearance-color-input input[type=color] {border-radius:50%}
+${PANEL} .dsh-appearance-colors input[type=color] {border-radius:4px}
 ${PANEL} [role="tablist"] {
   position:static;
   display:flex;
@@ -489,6 +525,15 @@ ${REDUCED} {background:var(--dsw-alias-bg-base)}
   ${PANEL} [role="switch"] > span {background:ButtonText}
   ${PANEL} [role="switch"][aria-checked="true"] > span {background:HighlightText}
   ${PANEL} .dsh-win-combo-trigger {border-color:ButtonText;background:ButtonFace;color:ButtonText}
+  ${PANEL} .dsh-win-combo-popup {border-color:ButtonText;background:Canvas;color:CanvasText;scrollbar-color:auto}
+  ${PANEL} .dsh-win-combo-option {color:CanvasText}
+  ${PANEL} .dsh-win-combo-option:is([data-active],[aria-selected="true"]) {background:Highlight;color:HighlightText;forced-color-adjust:none}
+  ${PANEL} .dsh-win-combo-option[aria-selected="true"]::before {background:HighlightText}
+}
+@media (max-width:760px) {
+  ${PANEL} > nav {width:170px}
+  ${PANEL} .dsh-appearance-row {gap:12px;flex-wrap:wrap}
+  ${PANEL} .dsh-appearance-control {max-width:100%}
 }
 @media (max-width:700px) {
   ${PANEL} > nav {width:168px}

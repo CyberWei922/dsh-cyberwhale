@@ -61,13 +61,15 @@ function createAppearanceController(ctx, call) {
     else document.body.style.removeProperty('--whale-mac-selection-fill');
     const worst = mix(p.bg, contrast(p.fg, '#000000') > contrast(p.bg, '#000000') ? '#FFFFFF' : '#000000', 0.16);
     document.body.style.setProperty('--whale-glass-text', readable(p.fg, worst));
-    const active = config?.enabled && config.background !== 'none' && !reduced
+    // The OS preference controls translucent materials, not a user's explicit
+    // static wallpaper. Only our own solid-surface option hides the background.
+    const active = config?.enabled && config.background !== 'none' && !config.reduceTransparency
       && (config.background !== 'image' || imageURL !== null);
     // Windows 原生窗口按钮（最小化/关闭…）的覆盖层由官方 preload 从 body 上解析
     // 的 --dsw-specific-sidebar-fill 取值（隐藏探针 + IPC，页面改不了原生层）。
-    // 背景模式生效时把它置为 transparent，原生按钮区就透出网页顶栏（磨砂），
+    // 背景模式且允许磨砂时把它置为 transparent，原生按钮区就透出网页顶栏，
     // 不会在右上角留一块与主题不符的官方白色；其余状态/平台保持官方值原样。
-    if (document.documentElement?.hasAttribute?.('data-windows-titlebar') === true && active) {
+    if (document.documentElement?.hasAttribute?.('data-windows-titlebar') === true && active && !reduced) {
       document.body.style.setProperty('--dsw-specific-sidebar-fill', 'transparent');
     } else {
       document.body.style.removeProperty('--dsw-specific-sidebar-fill');

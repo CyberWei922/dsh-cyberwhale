@@ -56,6 +56,7 @@
     "verify:bubble-glass": "node tools/verify-bubble-glass.mjs",
     "verify:gaze": "node tools/verify-gaze.mjs",
     "test:platform": "node tools/test-platform.mjs",
+    "test:win-combobox": "node tools/test-win-combobox.mjs",
     "test:wallpaper": "node tools/test-appearance-wallpaper.mjs"
   },
   "keywords": [

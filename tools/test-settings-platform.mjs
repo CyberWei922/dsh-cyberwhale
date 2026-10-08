@@ -109,10 +109,10 @@ win('Light/Dark token 双档为官方 alpha 原值',
   css.includes('--whale-win-subtle-secondary:rgba(0,0,0,.0353)') && css.includes('--whale-win-subtle-secondary:rgba(255,255,255,.0588)') &&
   css.includes('--whale-win-layer:rgba(255,255,255,.5)') && css.includes('--whale-win-layer:rgba(255,255,255,.0538)') &&
   css.includes('--whale-win-control-fill:rgba(255,255,255,.702)') && css.includes('--whale-win-control-fill:rgba(255,255,255,.0588)'));
-// 平铺行：透明底、无边框、官方 DividerStroke 分割线；悬停只加 SubtleFillColorSecondary。
-win('设置行平铺（无卡片白底/边框，细分割线分隔）',
+// 行本身保持平铺，主题页由带作用域的容器提供用户确认的分组表面。
+win('设置行保留细分割线，主题页分组使用 Windows 专属表面',
   /:is\(\.dsh-appearance-row,\s*\.dsh-whale-row\)[^{]*\{[^}]*background-color:transparent[^}]*\}/.test(css) &&
-  /background-size:100% 1px/.test(css) && !css.includes('--whale-win-card') && !/var\(--dsw-alias-bg-layer-1\)/.test(css));
+  /background-size:100% 1px/.test(css) && /\.dsh-appearance-general-group\s*\{[^}]*background:var\(--whale-win-card\)/.test(css));
 win('行悬停用官方 SubtleFillColorSecondary', /:hover\s*\{[^}]*background-color:var\(--whale-win-subtle-secondary\)/.test(css));
 // WinUI 下拉面板：4px 字段 + 8px 圆角弹层 + 选中项 3×16 强调色短竖条（无白色凸起）。
 win('WinUI 下拉面板样式（字段/弹层/选中强调条）',
