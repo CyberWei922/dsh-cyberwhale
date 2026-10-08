@@ -85,8 +85,8 @@ npm pack                     # 产出 dsh-cyberwhale-<version>.tgz
 ```bash
 # 1) 改版本号（tag 必须和 package.json 的 version 一致，workflow 会校验）
 # 2) 提交后打 tag 并推
-git tag -a v1.0.1 -m "v1.0.1：更新插件名称与介绍"
-git push origin main refs/tags/v1.0.1
+git tag -a v1.0.2 -m "v1.0.2：修复 Windows 设置交互与背景切换"
+git push origin main refs/tags/v1.0.2
 ```
 
 workflow 会依次：安装构建依赖 → 校验 tag 与版本一致 → 重建 `lib/client.js` 并检查产物已提交 →
@@ -128,10 +128,14 @@ npm 那一步排在创建 Release **之后**，所以即使 npm 发布失败（�
 
 包名已定为 **`dsh-cyberwhale`**，GitHub 仓库也已同名：`CyberWei922/dsh-cyberwhale`。
 
-**当前正式版本：v1.0.1**。发布通道为 [npm](https://www.npmjs.com/package/dsh-cyberwhale) 与
-[GitHub Release](https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v1.0.1)，版本内容见 [1.0.1 修正版说明](release-1.0.1.md) 和 [1.0 正式版说明](release-1.0.0.md)。发布结果以 Actions 和对应下载页面为准。
+**当前正式版本：v1.0.2**。发布通道为 [npm](https://www.npmjs.com/package/dsh-cyberwhale) 与
+[GitHub Release](https://github.com/CyberWei922/dsh-cyberwhale/releases/tag/v1.0.2)，版本内容见 [1.0.2 修正版说明](release-1.0.2.md) 和 [1.0 正式版说明](release-1.0.0.md)。发布结果以 Actions 和对应下载页面为准。
 
 **发布是全自动的：推一个 `v*` tag 就够了。** 详见下面的「发布」。
+
+### v1.0.2 改了什么
+
+Windows 设置样式对齐微软 Fluent / WinUI 3 token，字体、主题预设、图片布局与桌宠大小使用自绘下拉框。修复下拉弹层被裁剪、滚动无法到达末项和键盘选择问题；背景类型切换保留已上传图片与效果参数，空图片模式可直接选择并上传。macOS 保留原有下拉框与分段控件，补充两端回归和隔离浏览器交互检查。Windows 实机验收由维护者确认通过。
 
 ### v1.0.1 改了什么
 
@@ -238,11 +242,11 @@ npm version patch --no-git-tag-version     # 或手动改 package.json
 npm test
 
 # 3. 提交
-git add package.json package-lock.json README.md docs/distribution.md && git commit -m "chore: 发布新版本"
+git add package.json package-lock.json README.md docs/distribution.md docs/release-1.0.2.md && git commit -m "chore: 发布新版本"
 
 # 4. 打 tag 并推 —— 这一步就是发布
-git tag -a v1.0.1 -m "v1.0.1：更新插件名称与介绍"
-git push origin main refs/tags/v1.0.1
+git tag -a v1.0.2 -m "v1.0.2：修复 Windows 设置交互与背景切换"
+git push origin main refs/tags/v1.0.2
 ```
 
 推完用 `gh run watch` 看进度，约 30 秒。
