@@ -12,10 +12,28 @@
  * changes, only its grouped-row treatment falls back to Harness styling.
  */
 const PANEL = 'body[data-whale-mac-settings] [data-shortcut-modal="settings"]';
-const GENERAL = `${PANEL} > nav + div > div + div > div:has(> div > [role="switch"])`;
+/**
+ * Structural anchors.
+ *
+ * Harness 0.2.2 moved the window title out of `<nav>` and made the actions row
+ * and the section area *siblings* of `<nav>`:
+ *
+ *   0.1/0.2.0: panel > nav > [title, list] ; panel > content > [header, options]
+ *   0.2.2:     panel > title ; nav ; header ; options
+ *
+ * So `> nav + div` no longer means "the content column" — it means the actions
+ * row. Sibling order is therefore off-limits; every rule anchors on a published
+ * slot instead (`settings.header`, `settings.close`, `settings.section`).
+ */
+const TITLE = `${PANEL} > div:has(> [data-slot="settings.header"])`;
+const HEADER = `${PANEL} > div:has([data-slot="settings.close"])`;
+const CONTENT = `${PANEL} > div:has(> [data-slot="settings.section"])`;
+// The official General page renders one item wrapper per preference; the row
+// itself is the wrapper's only child.
+const GENERAL_ROW = `${CONTENT} [data-slot="settings.general.item"] > div`;
 const ROWS = [
   [`${PANEL} :is(.dsh-appearance-row, .dsh-whale-row)`, 'div:is(.dsh-appearance-row, .dsh-whale-row)'],
-  [`${GENERAL} > div`, 'div'],
+  [GENERAL_ROW, 'div'],
 ];
 // Adjacent rows paint one continuous card without reparenting React elements.
 const rowRules = ROWS.map(([row, next]) => `
@@ -60,6 +78,13 @@ ${PANEL} {
   width:860px;
   max-width:calc(100vw - 48px);
   height:min(680px,calc(100dvh - 48px));
+  /* Own the two-column geometry: the sidebar material spans the full height
+   * (title included) while the content column scrolls independently. */
+  position:relative;
+  display:grid;
+  grid-template-columns:208px minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  overflow:hidden;
   border:1px solid var(--whale-mac-hairline);
   border-radius:18px;
   corner-shape:round;
@@ -78,25 +103,53 @@ body[data-ds-dark-theme][data-whale-mac-settings] [data-shortcut-modal="settings
   --whale-mac-thumb:#e9e9e9;
   box-shadow:0 24px 70px #00000066,0 0 0 .5px #00000066,inset 0 1px 0 #ffffff12;
 }
-${PANEL} > nav {
+/* The sidebar material is one panel-level layer, so it covers the window title
+ * and the scrolling list without turning the list into the scroll owner of the
+ * title row. */
+${PANEL}::before {
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
   width:208px;
-  min-width:0;
-  padding:24px 10px 12px;
-  gap:22px;
+  z-index:0;
+  pointer-events:none;
   background:var(--whale-mac-sheen),var(--whale-mac-frost);
   backdrop-filter:blur(36px) saturate(145%);
   -webkit-backdrop-filter:blur(36px) saturate(145%);
   box-shadow:inset 0 1px 0 #ffffff12;
   border-right:1px solid var(--whale-mac-hairline);
 }
-${PANEL} > nav > div:first-child {
-  padding:0 12px;
+/* Window title (sidebar top). 0.2.2 renders it as a panel child, not inside nav. */
+${TITLE} {
+  grid-column:1;
+  grid-row:1;
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  padding:20px 22px 8px;
   font-size:15px;
   font-weight:600;
   line-height:24px;
   letter-spacing:-.015em;
 }
-${PANEL} > nav > div + div {gap:2px;min-height:0}
+${PANEL} > nav {
+  grid-column:1;
+  grid-row:2;
+  position:relative;
+  z-index:1;
+  width:auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  padding:0 10px 12px;
+  gap:2px;
+  overflow:auto;
+  background:transparent;
+}
 ${PANEL} nav button {
   flex-shrink:0;
   height:32px;
@@ -117,32 +170,50 @@ ${PANEL} nav button[aria-current="true"] {
   font-weight:600;
 }
 ${PANEL} nav button[aria-current="true"] > svg {color:inherit}
-${PANEL} > nav + div {background:var(--whale-mac-content)}
-${PANEL} > nav + div > div:first-child {
-  height:62px;
+/* Actions row of the content column (Open configuration file + close). */
+${HEADER} {
+  grid-column:2;
+  grid-row:1;
+  position:relative;
+  z-index:1;
+  display:flex;
   align-items:center;
+  gap:12px;
+  height:62px;
   padding:16px 20px;
+  background:var(--whale-mac-content);
 }
 ${PANEL} [data-whale-settings-title]::before {
   content:attr(data-whale-settings-title);
+  flex:1 1 auto;
+  min-width:0;
   color:var(--dsw-alias-label-primary);
   font-size:17px;
   line-height:24px;
   font-weight:600;
   letter-spacing:-.02em;
 }
-${PANEL} > nav + div > div:first-child > button {
+${HEADER} > button {
   border-radius:50%;
   corner-shape:round;
   background:var(--dsw-alias-interactive-bg-hover);
   color:var(--dsw-alias-label-secondary);
 }
-${PANEL} > nav + div > div + div {padding:0 20px 24px;scrollbar-gutter:stable}
+/* Section area: the only scroll owner of the content column. */
+${CONTENT} {
+  grid-column:2;
+  grid-row:2;
+  min-height:0;
+  padding:0 20px 24px;
+  overflow:auto;
+  background:var(--whale-mac-content);
+  scrollbar-gutter:stable;
+}
 
 ${rowRules}
 /* Row text stays readable; previews, badges and color editors keep their sizes. */
 ${PANEL} :is(.dsh-whale-title,.dsh-appearance-label),
-${GENERAL} > div > div:first-child > div:first-child {font-size:13px;line-height:20px;font-weight:400}
+${GENERAL_ROW} > div:first-child > div:first-child {font-size:13px;line-height:20px;font-weight:400}
 ${PANEL} :is(.dsh-whale-description,.dsh-appearance-description) {margin-top:3px;line-height:18px}
 ${PANEL} :is(.dsh-whale-text,.dsh-appearance-row > div:first-child) {min-width:0}
 ${PANEL} label[for] {font-size:13px;font-weight:400;letter-spacing:-.005em}
@@ -209,21 +280,21 @@ ${PANEL} :is(nav button,[role="switch"]):focus-visible {
 }
 
 /* Reduced transparency retains layout and controls, using a solid sidebar. */
-body[data-whale-mac-settings-reduced] [data-shortcut-modal="settings"] > nav {
+body[data-whale-mac-settings-reduced] [data-shortcut-modal="settings"]::before {
   background:var(--whale-mac-sidebar-solid);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;
 }
 @media (prefers-reduced-transparency:reduce) {
-  ${PANEL} > nav {background:var(--whale-mac-sidebar-solid);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
+  ${PANEL}::before {background:var(--whale-mac-sidebar-solid);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
 }
 @supports not (backdrop-filter:blur(1px)) {
-  ${PANEL} > nav {background:var(--whale-mac-sidebar-solid);box-shadow:none}
+  ${PANEL}::before {background:var(--whale-mac-sidebar-solid);box-shadow:none}
 }
 @media (prefers-reduced-motion:reduce) {
   ${PANEL} *,${PANEL} *::before {transition:none!important;animation:none!important}
 }
 @media (prefers-contrast:more) {
   ${PANEL} {--whale-mac-hairline:var(--dsw-alias-border-l4)}
-  ${PANEL} > nav {background:var(--whale-mac-content);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
+  ${PANEL}::before {background:var(--whale-mac-content);backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none}
   ${PANEL} [role="switch"] {outline:1px solid var(--dsw-alias-label-secondary)}
 }
 @media (forced-colors:active) {
@@ -233,16 +304,20 @@ body[data-whale-mac-settings-reduced] [data-shortcut-modal="settings"] > nav {
   ${PANEL} [role="switch"][aria-checked="true"] > span {background:HighlightText}
 }
 @media (max-width:700px) {
-  ${PANEL} > nav {width:168px}
-  ${PANEL} > nav + div > div + div {padding:0 14px 20px}
+  ${PANEL} {grid-template-columns:168px minmax(0,1fr)}
+  ${PANEL}::before {width:168px}
+  ${CONTENT} {padding:0 14px 20px}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {gap:12px;flex-wrap:wrap}
 }
 @media (max-width:480px) {
   ${PANEL} {max-width:calc(100vw - 24px);height:calc(100dvh - 24px);border-radius:14px}
-  ${PANEL} > nav {width:120px;padding:18px 6px 10px}
+  ${PANEL} {grid-template-columns:120px minmax(0,1fr)}
+  ${PANEL}::before {width:120px}
+  ${TITLE} {padding:16px 12px 6px}
+  ${PANEL} > nav {padding:0 6px 10px}
   ${PANEL} nav button {padding:0 6px;gap:6px}
   ${PANEL} nav button > svg {width:16px;height:16px}
-  ${PANEL} > nav + div > div + div {padding:0 10px 16px}
+  ${CONTENT} {padding:0 10px 16px}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {padding:10px;gap:8px}
   ${PANEL} .dsh-appearance-row:has([role="switch"]) {flex-wrap:nowrap}
   ${PANEL} :is(.dsh-appearance-control,.dsh-whale-control) {max-width:100%}

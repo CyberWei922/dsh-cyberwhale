@@ -27,10 +27,21 @@ function createAppearanceController(ctx, call) {
     for (const [frame, layer] of layers) { layer.remove(); frame.removeAttribute('data-whale-wallpaper-frame'); }
     layers.clear();
   }
+  /**
+   * The content column's actions row, which carries the copied section title.
+   *
+   * Harness 0.2.2 moved this row out of the content column: the panel's children
+   * are now title, nav, actions, sections. Anchor on the published close slot and
+   * keep the pre-0.2.2 `nav + div` shape as a fallback so either DOM works.
+   */
+  function settingsHeader(panel) {
+    return panel.querySelector(':scope > div:has([data-slot="settings.close"])')
+      ?? panel.querySelector(':scope > nav + div > div:first-child');
+  }
   function paintSettingsTitles(enabled) {
     const headers = new Set();
     if (enabled) for (const panel of document.querySelectorAll('[data-shortcut-modal="settings"]')) {
-      const header = panel.querySelector(':scope > nav + div > div:first-child');
+      const header = settingsHeader(panel);
       const title = panel.querySelector('nav button[aria-current="true"]')?.textContent?.trim();
       if (!header || !title) continue;
       headers.add(header);
@@ -184,7 +195,9 @@ function createAppearanceController(ctx, call) {
     },
     async upload(dataURL, name) { return call('uploadWallpaper', { dataURL, name }); },
     async setMode(value) { try { await ctx.theme.setTheme(value); } catch (e) { error = e.message; emit(); } },
-    async setFontSize(value) { try { await ctx.theme.setFontSize(value); } catch (e) { error = e.message; emit(); } },
+    // Harness 0.2.2 takes a font role plus a size (`setFontSize(role, px)`);
+    // the page only edits the conversation text role.
+    async setFontSize(value) { try { await ctx.theme.setFontSize('text', value); } catch (e) { error = e.message; emit(); } },
     dispose() {
       disposed = true; clearInterval(timer); if (raf !== null) cancelAnimationFrame(raf);
       observer?.disconnect(); tokenDisposer?.(); removeLayers(); paintSettingsTitles(false); ++imageTask;

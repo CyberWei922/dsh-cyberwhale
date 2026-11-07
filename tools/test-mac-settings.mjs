@@ -39,7 +39,7 @@ const bundle = await readFile(join(root, 'lib', 'client.js'), 'utf8');
 const anchors = [
   ['面板根属性', 'data-shortcut-modal="settings"'],
   ['左侧导航列（原生 nav）', '> nav'],
-  ['右侧内容列（nav 的相邻兄弟）', '> nav + div'],
+  ['右侧内容列（settings.section 所在列）', '> div:has(> [data-slot="settings.section"])'],
   ['选中的导航项', 'nav button[aria-current="true"]'],
   ['开关基元', '[role="switch"]'],
   ['开关状态写在 aria-checked 上', '[aria-checked="true"]'],
@@ -59,8 +59,8 @@ check('每条面板规则都带作用域门', ungated.length === 0, ungated.join
 
 // ── 4. 左右分界确实是「面板让出背景 + 两列各自负责」 ──────────────────
 check('面板本体让出背景', /\[data-shortcut-modal="settings"\][^{]*\{[^}]*background:transparent/.test(css));
-check('左列用 backdrop-filter 磨砂', />\s*nav\s*\{[^}]*backdrop-filter:blur\(/.test(css));
-check('右列保持不透明', />\s*nav\s*\+\s*div\s*\{[^}]*background:var\(--whale-mac-content\)/.test(css));
+check('左列用 backdrop-filter 磨砂', /::before\s*\{[^}]*backdrop-filter:blur\(/.test(css));
+check('右列保持不透明', />\s*div:has\(>\s*\[data-slot="settings.section"\]\)\s*\{[^}]*background:var\(--whale-mac-content\)/.test(css));
 
 // 遮罩不做全屏模糊：面板直接浮现在应用内容上，这是明确要求过的行为。
 check('遮罩没有全屏模糊', !/:has\(>\s*\[data-shortcut-modal[^{]*\{[^}]*backdrop-filter/.test(css));
@@ -92,7 +92,7 @@ check('滑块使用独立浅色，而不是主题反色文字', /\[role="switch"
 check('含 prefers-reduced-transparency 回退', css.includes('prefers-reduced-transparency:reduce'));
 check('含 backdrop-filter 不支持时的回退', css.includes('@supports not (backdrop-filter:blur(1px))'));
 check('含减少动态效果适配', css.includes('prefers-reduced-motion:reduce'));
-check('分组不依赖官方哈希类名或 DOM 重排', css.includes(':has(> div > [role="switch"])') && css.includes('background-size:calc(100% - 32px) 1px'));
+check('分组不依赖官方哈希类名或 DOM 重排', css.includes('[data-slot="settings.general.item"] > div') && css.includes('background-size:calc(100% - 32px) 1px'));
 
 // ── 7. 运行时开关：减少透明保留几何，只关闭磨砂 ──────────────────────
 check('运行时按客户端平台选择样式', runtime.includes('applySettingsPlatform(document, { enabled: !!config?.enabled, reduced })'));

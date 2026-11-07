@@ -101,7 +101,7 @@ CyberWhale 为 Harness 做了一套**双端视觉本地化**，参考两套系�
 
 ## 快速上手
 
-需要安装并启动过一次 [DeepSeek Harness 官方 Desktop](https://github.com/deepseek-ai/deepseek-harness)。当前基于 Harness Desktop **0.2.0-rc.2** 验证。
+需要安装并启动过一次 [DeepSeek Harness 官方 Desktop](https://github.com/deepseek-ai/deepseek-harness)。当前基于 Harness Desktop **0.2.2-rc.1** 验证。
 
 ### 1. 安装并启用插件
 

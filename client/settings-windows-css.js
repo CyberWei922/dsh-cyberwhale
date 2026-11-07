@@ -24,12 +24,22 @@
 const PANEL = 'body[data-whale-settings-platform="windows"] [data-shortcut-modal="settings"]';
 const DARK = `body[data-ds-dark-theme][data-whale-settings-platform="windows"] [data-shortcut-modal="settings"]`;
 const REDUCED = `body[data-whale-settings-platform="windows"][data-whale-settings-reduced] [data-shortcut-modal="settings"]`;
-// The official General page renders one switch row per preference; its section
-// wrapper is the only direct child of the options column that contains one.
-const GENERAL = `${PANEL} > nav + div > div + div > div:has(> div > [role="switch"])`;
+/**
+ * Structural anchors. Harness 0.2.2 moved the window title out of `<nav>` and
+ * made the actions row and the section area siblings of `<nav>`, so the old
+ * `> nav + div` content-column selector now points at the actions row. Anchor
+ * on the published slots (`settings.header`, `settings.close`,
+ * `settings.section`) instead of sibling order.
+ */
+const TITLE = `${PANEL} > div:has(> [data-slot="settings.header"])`;
+const HEADER = `${PANEL} > div:has([data-slot="settings.close"])`;
+const CONTENT = `${PANEL} > div:has(> [data-slot="settings.section"])`;
+// The official General page renders one item wrapper per preference; the row
+// itself is the wrapper's only child.
+const GENERAL_ROW = `${CONTENT} [data-slot="settings.general.item"] > div`;
 const ROWS = [
   [`${PANEL} :is(.dsh-appearance-row, .dsh-whale-row)`, 'div:is(.dsh-appearance-row, .dsh-whale-row)'],
-  [`${GENERAL} > div`, 'div'],
+  [GENERAL_ROW, 'div'],
 ];
 // Flat list rows (the Windows 11 Sound-page pattern): transparent fill, one
 // divider between rows, hover/press only wash the row with the official
@@ -96,6 +106,13 @@ ${PANEL} {
   width:960px;
   max-width:calc(100vw - 48px);
   height:min(700px,calc(100dvh - 48px));
+  /* Own the NavigationView geometry: 200px pane over a layer-filled content
+   * column, with the title row above the scrolling section area. */
+  position:relative;
+  display:grid;
+  grid-template-columns:200px minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  overflow:hidden;
   border:1px solid var(--whale-win-surface-stroke);
   border-radius:8px;
   corner-shape:round;
@@ -142,21 +159,35 @@ ${DARK} {
  * semibold, 3×16px accent indicator at the leading edge.  The pane keeps the
  * Mica base; the content column takes LayerFillColorDefault, exactly like
  * NavigationViewContentBackground. */
-${PANEL} > nav {
-  width:200px;
-  min-width:0;
-  padding:20px 10px 12px;
-  gap:18px;
-  background:transparent;
-  border-right:1px solid var(--whale-win-divider);
-}
-${PANEL} > nav > div:first-child {
-  padding:0 8px;
+/* Window title (pane top). 0.2.2 renders it as a panel child, not inside nav. */
+${TITLE} {
+  grid-column:1;
+  grid-row:1;
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  padding:18px 18px 8px;
   font-size:16px;
   line-height:22px;
   font-weight:600;
 }
-${PANEL} > nav > div + div {gap:2px;min-height:0}
+${PANEL} > nav {
+  grid-column:1;
+  grid-row:2;
+  position:relative;
+  z-index:1;
+  width:auto;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  padding:0 10px 12px;
+  gap:2px;
+  overflow:auto;
+  background:transparent;
+  border-right:1px solid var(--whale-win-divider);
+}
 ${PANEL} nav button {
   box-sizing:border-box;
   position:relative;
@@ -194,31 +225,47 @@ ${PANEL} nav button[aria-current="true"] > svg {color:var(--dsw-alias-label-prim
 /* ── Page chrome ──────────────────────────────────────────────────────────
  * Content sits on LayerFillColorDefault; the heading uses the WinUI subtitle
  * ramp (20/28 semibold) and copies the active navigation label. */
-${PANEL} > nav + div {background:var(--whale-win-layer)}
-${PANEL} > nav + div > div:first-child {
-  height:64px;
+${HEADER} {
+  grid-column:2;
+  grid-row:1;
+  position:relative;
+  z-index:1;
+  display:flex;
   align-items:center;
+  gap:12px;
+  height:64px;
   padding:16px 20px;
+  background:var(--whale-win-layer);
 }
 ${PANEL} [data-whale-settings-title]::before {
   content:attr(data-whale-settings-title);
+  flex:1 1 auto;
+  min-width:0;
   color:var(--dsw-alias-label-primary);
   font-size:20px;
   line-height:28px;
   font-weight:600;
 }
-${PANEL} > nav + div > div:first-child > button {
+${HEADER} > button {
   border-radius:4px;
   background:transparent;
   color:var(--whale-win-text-secondary);
 }
-${PANEL} > nav + div > div:first-child > button:hover {background:var(--whale-win-subtle-secondary)}
-${PANEL} > nav + div > div + div {padding:0 20px 24px;scrollbar-gutter:stable}
+${HEADER} > button:hover {background:var(--whale-win-subtle-secondary)}
+${CONTENT} {
+  grid-column:2;
+  grid-row:2;
+  min-height:0;
+  padding:0 20px 24px;
+  overflow:auto;
+  background:var(--whale-win-layer);
+  scrollbar-gutter:stable;
+}
 
 ${rowRules}
 /* Typography: Body 14/20, Caption 12/16, subtitle already on the heading. */
 ${PANEL} :is(.dsh-whale-title,.dsh-appearance-label),
-${GENERAL} > div > div:first-child > div:first-child {font-size:14px;line-height:20px;font-weight:400}
+${GENERAL_ROW} > div:first-child > div:first-child {font-size:14px;line-height:20px;font-weight:400}
 ${PANEL} :is(.dsh-whale-description,.dsh-appearance-description) {font-size:12px;line-height:16px;margin-top:2px;color:var(--whale-win-text-secondary)}
 ${PANEL} :is(.dsh-whale-text,.dsh-appearance-row > div:first-child) {min-width:0}
 ${PANEL} label[for] {font-size:14px;font-weight:400}
@@ -531,21 +578,23 @@ ${REDUCED} {background:var(--dsw-alias-bg-base)}
   ${PANEL} .dsh-win-combo-option[aria-selected="true"]::before {background:HighlightText}
 }
 @media (max-width:760px) {
-  ${PANEL} > nav {width:170px}
+  ${PANEL} {grid-template-columns:170px minmax(0,1fr)}
   ${PANEL} .dsh-appearance-row {gap:12px;flex-wrap:wrap}
   ${PANEL} .dsh-appearance-control {max-width:100%}
 }
 @media (max-width:700px) {
-  ${PANEL} > nav {width:168px}
-  ${PANEL} > nav + div > div + div {padding:0 14px 20px}
+  ${PANEL} {grid-template-columns:168px minmax(0,1fr)}
+  ${CONTENT} {padding:0 14px 20px}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {gap:12px;flex-wrap:wrap}
 }
 @media (max-width:480px) {
   ${PANEL} {max-width:calc(100vw - 24px);height:calc(100dvh - 24px)}
-  ${PANEL} > nav {width:120px;padding:16px 6px 10px}
+  ${PANEL} {grid-template-columns:120px minmax(0,1fr)}
+  ${TITLE} {padding:14px 10px 6px}
+  ${PANEL} > nav {padding:0 6px 10px}
   ${PANEL} nav button {padding:0 6px;gap:6px}
   ${PANEL} nav button[aria-current="true"]::before {left:0}
-  ${PANEL} > nav + div > div + div {padding:0 10px 16px}
+  ${CONTENT} {padding:0 10px 16px}
   ${PANEL} :is(.dsh-appearance-row,.dsh-whale-row) {padding:10px;gap:8px}
   ${PANEL} .dsh-appearance-row:has([role="switch"]) {flex-wrap:nowrap}
   ${PANEL} :is(.dsh-appearance-control,.dsh-whale-control) {max-width:100%}

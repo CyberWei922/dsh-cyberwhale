@@ -58,12 +58,12 @@ for (const [label, anchor] of [
   ['开关基元', '[role="switch"]'],
   ['开关状态写在 aria-checked 上', '[aria-checked="true"]'],
   ['页面标题锚点', '[data-whale-settings-title]'],
-  ['右侧顶栏', '> nav + div > div:first-child'],
-  ['内容滚动区域', '> nav + div > div + div'],
+  ['右侧顶栏', '> div:has([data-slot="settings.close"])'],
+  ['内容滚动区域', '> div:has(> [data-slot="settings.section"])'],
   ['插件设置行', '.dsh-appearance-row'],
   ['桌宠设置行', '.dsh-whale-row'],
   ['主题卡片', '.dsh-appearance-card'],
-  ['官方通用页分组', ':has(> div > [role="switch"])'],
+  ['官方通用页分组', '[data-slot="settings.general.item"] > div'],
 ]) win(`CSS 含锚点：${label}`, css.includes(anchor), anchor);
 win('不依赖 CSS Module 哈希类名', !/\.[A-Za-z0-9_-]{6,}_[A-Za-z][A-Za-z0-9]*/.test(css));
 win('不含 macOS 门控（互不影响）', !css.includes('data-whale-mac-settings') && !css.includes('data-platform=darwin'));
@@ -100,7 +100,7 @@ win('选中导航项用官方 SubtleFill 档 + 强调色短竖条',
   /nav button\[aria-current="true"\]\s*\{[^}]*background:var\(--whale-win-subtle-secondary\)/.test(css) &&
   /nav button\[aria-current="true"\]:hover\s*\{[^}]*var\(--whale-win-subtle-tertiary\)/.test(css) &&
   /nav button\[aria-current="true"\]::before\s*\{[^}]*width:3px[^}]*height:16px[^}]*background:var\(--dsw-alias-brand-primary\)/.test(css));
-win('内容列使用 NavigationViewContentBackground（LayerFill）', /> nav \+ div\s*\{[^}]*background:var\(--whale-win-layer\)/.test(css));
+win('内容列使用 NavigationViewContentBackground（LayerFill）', /> div:has\(> \[data-slot="settings.section"\]\)\s*\{[^}]*background:var\(--whale-win-layer\)/.test(css));
 win('页面标题用 WinUI 标题字号阶梯', /\[data-whale-settings-title\]::before\s*\{[^}]*font-size:20px[^}]*font-weight:600/.test(css));
 win('面板圆角 8px、控件圆角 4px', /\{[^}]*border-radius:8px/.test(css) && /border-radius:4px/.test(css));
 win('主题相关变量统一 --whale-win-* 前缀', css.includes('--whale-win-mica') && !/--whale-(?!win-)[a-z]/.test(css));

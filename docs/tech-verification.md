@@ -12,11 +12,11 @@
 |---|---|---|
 | 应用 | `/Applications/DeepSeek Harness.app` | 本机 |
 | Bundle ID | `com.deepseek.dsh` | `codesign -dvvv` |
-| 应用版本 | `0.2.0-rc.2` | `Contents/Info.plist` |
-| 运行时版本 | `0.2.0-rc.2`（内置 290 个包） | `app.asar/dsh/desktop-runtime.json` |
+| 应用版本 | `0.2.2-rc.1` | `Contents/Info.plist` |
+| 运行时版本 | `0.2.2-rc.1`（内置 332 个包） | `app.asar/dsh/desktop-runtime.json` |
 | hostProtocolVersion | `4` | 同上 |
-| 内置 Node | `24.18.1` ｜ pnpm `11.7.0` | `Resources/runtime/versions.json` |
-| 架构 | `arm64` ｜ Electron runtime v26.5.0 | 二进制 |
+| 内置 Node | `24.21.0` ｜ pnpm `11.28.5` | `Resources/runtime/versions.json` |
+| 架构 | `arm64` ｜ Electron（应用自带） | 二进制 |
 | 代码签名 | 已签名，Team `NAN929V4UM`，**hardened runtime**（`flags=0x10000`） | `codesign` |
 | **App Sandbox** | ❌ **未启用**（无 `com.apple.security.app-sandbox`） | `codesign -d --entitlements` |
 | 已有 entitlements | `allow-jit`、`allow-unsigned-executable-memory`、**`disable-library-validation`**、`device.audio-input` | 同上 |
@@ -26,7 +26,7 @@
 `disable-library-validation` ⇒ 加载非同签名的库/框架不会被拦。
 
 > ⚠️ 版本澄清：`~/.dsh/profiles/node_modules/@deepseek-ai/*` 下是 `0.1.0-rc.6`，
-> 那是旧 `dsh web` profile 的残留，**桌面版不使用它**。桌面版加载 `app.asar/dsh` 里自带的 0.2.0-rc.2。
+> 那是旧 `dsh web` profile 的残留，**桌面版不使用它**。桌面版加载 `app.asar/dsh` 里自带的 0.2.2-rc.1。
 
 ---
 

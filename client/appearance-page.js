@@ -110,6 +110,9 @@ function AppearancePage({ controller }) {
   }
   const section = (title, description, children) => h('section', { className: 'dsh-appearance-section' }, h('h3', null, title), description && h('p', { className: 'dsh-appearance-description' }, description), children);
   const row = (key, title, description, control) => h(Row, { key, title, description }, control);
+  // 0.2.2 exposes per-role sizes (`fontSizes.text`); earlier builds exposed a
+  // single `fontSize`. Read both so the stepper keeps showing the real value.
+  const fontSize = theme?.fontSizes?.text ?? theme?.fontSize ?? 14;
   const toggle = (key, title, description, extraDisabled = false) => row(key, title, description, h(Switch, { label: title, checked: config[key], disabled: disabled || extraDisabled, onChange: v => edit({ [key]: v }) }));
   return h('div', { className: 'dsh-appearance-page' },
     h('p', { className: 'dsh-appearance-intro' }, '选择喜欢的配色，修改后立即生效并自动保存。'),
@@ -121,7 +124,7 @@ function AppearancePage({ controller }) {
     h('div', { className: 'dsh-appearance-cards' }, h(ThemeCard, { scheme: 'light', config, edit, disabled }), h(ThemeCard, { scheme: 'dark', config, edit, disabled })),
     section('字体', null, [
       h(FontSettings, { key: 'fonts', config, edit, disabled }),
-      row('size', '正文字号', '使用 Harness 原有字号设置，立即保存。', h('div', { className: 'dsh-appearance-size' }, h(Button, { 'aria-label': '缩小正文字号', disabled: disabled || theme?.fontSize <= 10, onClick: () => void controller.setFontSize((theme?.fontSize ?? 14) - 1) }, '−'), h('span', null, `${theme?.fontSize ?? 14} px`), h(Button, { 'aria-label': '增大正文字号', disabled: disabled || theme?.fontSize >= 22, onClick: () => void controller.setFontSize((theme?.fontSize ?? 14) + 1) }, '+'))),
+      row('size', '正文字号', '使用 Harness 原有字号设置，立即保存。', h('div', { className: 'dsh-appearance-size' }, h(Button, { 'aria-label': '缩小正文字号', disabled: disabled || fontSize <= 10, onClick: () => void controller.setFontSize(fontSize - 1) }, '−'), h('span', null, `${fontSize} px`), h(Button, { 'aria-label': '增大正文字号', disabled: disabled || fontSize >= 22, onClick: () => void controller.setFontSize(fontSize + 1) }, '+'))),
     ]),
     section('背景', '背景铺满整个窗口，左侧面板叠加磨砂；收起侧栏时图片大小与位置不变。',
       h(BackgroundSettings, { key: `${config.background}:${config.wallpaper?.id ?? ''}`, config, theme, disabled, uploading, fileError, sources, sourceImage, fileInput, upload, extract, edit, remove, changeBackground })),

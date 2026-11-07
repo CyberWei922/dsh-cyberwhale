@@ -17,7 +17,7 @@ Harness 用 pnpm 在 `desktop` profile 里解析并安装这个 spec，成功后
 
 已确认的环境事实（本仓库据此对齐）：
 
-- 桌面版 DSH runtime 版本是 `0.2.0-rc.2`（`@deepseek-ai/dsh-desktop-runtime`），插件兼容性按这个版本判定。
+- 桌面版 DSH runtime 版本是 `0.2.2-rc.1`（`@deepseek-ai/dsh-desktop-runtime`），插件兼容性按这个版本判定。
 - 安装前 Harness 会先 `inspect` spec，**没有组合包 patch 的包直接被拒**（`not-a-bundle`）。
 - 兼容性检查只认 `package.json` 里 `@deepseek-ai/dsh` 和 `@deepseek-ai/dsh-*` 开头的 `peerDependencies`；本地路径与 npm 包名在 pnpm 运行**之前**判定，Git 地址与压缩包只能抓下来**之后**判定（不兼容会回滚）。
 - profile 的 `pnpm-workspace.yaml` 设了 `autoInstallPeers: false`，因此声明 peer 不会顺带安装它们。
